@@ -36,12 +36,29 @@ struct MacupApp: App {
     }
 }
 
-/// Opens the setup window on the first launch. Menu bar apps have no main window to hang this on.
+/// Opens the setup window on the first launch, and switches the app between menu-bar-only and regular
+/// mode: a menu bar agent has no application menu, so while a window is open MacUp becomes a regular app
+/// (name and menus in the menu bar, Dock icon) and returns to the menu bar when the last window closes.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         if Screenshots.runIfRequested() { return }
+        let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(windowChanged), name: NSWindow.didBecomeKeyNotification, object: nil)
+        center.addObserver(self, selector: #selector(windowChanged), name: NSWindow.willCloseNotification, object: nil)
         if !Preferences.shared.hasOnboarded {
             OnboardingWindow.show(store: UpdateStore.shared, settings: Preferences.shared)
+        }
+    }
+
+    @objc private func windowChanged(_ note: Notification) {
+        // Decide after the closing window is gone from the list.
+        DispatchQueue.main.async {
+            let open = NSApp.windows.contains { $0.isVisible && $0.styleMask.contains(.titled) && !($0 is NSPanel) }
+            let wanted: NSApplication.ActivationPolicy = open ? .regular : .accessory
+            if NSApp.activationPolicy() != wanted {
+                NSApp.setActivationPolicy(wanted)
+                if open { NSApp.activate(ignoringOtherApps: true) }
+            }
         }
     }
 }
