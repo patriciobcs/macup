@@ -39,7 +39,7 @@ struct MenuBarPanel: View {
             HStack(spacing: 10) {
                 if store.updatableCount > 0 {
                     Button { Task { await store.upgradeAllEligible() } } label: {
-                        Image(systemName: "arrow.down.circle.fill").font(.title3)
+                        Image(systemName: "arrow.up.circle.fill").font(.title3)
                     }
                     .buttonStyle(.borderless).disabled(store.isUpgradingAnything)
                     .help(store.isUpgradingAnything ? "Updating…" : "Update all \(store.updatableCount)")
@@ -83,7 +83,7 @@ struct MenuBarPanel: View {
                     }
                     Spacer()
                     if store.isUpgrading(cask) { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "arrow.down.circle").font(.title3).foregroundStyle(.secondary) }
+                    else { Image(systemName: "arrow.up.circle").font(.title3).foregroundStyle(.secondary) }
                 }
                 .padding(.horizontal, 9).padding(.vertical, 3)
             }
@@ -252,7 +252,7 @@ struct PanelRow: View {
             .buttonStyle(.borderless).help("Update failed:\n\(failure)\n\nClick to see the output. Right-click to retry.")
         } else if !dimmed {
             Button { Task { await store.upgrade(pkg) } } label: {
-                Image(systemName: pkg.manager.opensExternally ? "arrow.up.forward.app" : "arrow.down.circle").font(.title3)
+                Image(systemName: pkg.manager.opensExternally ? "arrow.up.forward.app" : "arrow.up.circle").font(.title3)
             }
             .buttonStyle(.borderless)
             .help(pkg.manager.opensExternally ? "Open Software Update in System Settings" : "Update \(pkg.name)")
