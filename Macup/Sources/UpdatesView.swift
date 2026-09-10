@@ -28,7 +28,7 @@ struct UpdatesView: View {
                     .buttonStyle(.borderless).help("Check now")
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
+        .padding(.horizontal, 12).frame(height: 44)   // same height as the output pane's header so the dividers line up
     }
 
     private var title: String {

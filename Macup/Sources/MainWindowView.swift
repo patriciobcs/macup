@@ -53,7 +53,7 @@ struct HistoryView: View {
                 Spacer()
                 Button("Clear") { store.history.clear() }.controlSize(.small).disabled(store.history.records.isEmpty)
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .padding(.horizontal, 12).frame(height: 44)
             Divider()
             if store.history.records.isEmpty {
                 Text("Updates, removals and ignores you perform will be listed here.")
@@ -129,7 +129,7 @@ struct LogView: View {
                 .controlSize(.small).disabled(store.log.isEmpty)
                 Button("Clear") { store.clearLog() }.controlSize(.small).disabled(store.log.isEmpty)
             }
-            .padding(.horizontal, 12).padding(.vertical, 8)
+            .padding(.horizontal, 12).frame(height: 44)
             Divider()
             LogTextView(text: store.log, revealMarker: store.revealMarker, revealCount: store.revealCount)
         }
