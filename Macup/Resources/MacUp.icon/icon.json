@@ -24,7 +24,7 @@
           "image-name" : "arrow.png",
           "name" : "arrow",
           "position" : {
-            "scale" : 1,
+            "scale" : 0.6,
             "translation-in-points" : [ 0, 0 ]
           }
         }
