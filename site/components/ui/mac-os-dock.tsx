@@ -1,3 +1,5 @@
+/* eslint-disable */
+// Vendored from shadcn.io (mac-os-dock); kept as shipped.
 "use client"
 
 import type React from "react"
