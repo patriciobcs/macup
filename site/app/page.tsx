@@ -84,7 +84,7 @@ export default function Home() {
       </main>
 
       {/* The open dropdown, left-aligned with its status item directly above. */}
-      <aside className="hidden pt-2 lg:block">
+      <aside className="hidden pt-1.5 lg:block">
         <Panel />
       </aside>
     </div>

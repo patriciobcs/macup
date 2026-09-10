@@ -1,8 +1,9 @@
-import { BatteryMedium, Bell, Bluetooth, Circle, CloudUpload, Search, SlidersHorizontal, Wifi } from "lucide-react";
+import { BatteryCharging, Bell, Bluetooth, Circle, CloudUpload, Search, SlidersHorizontal, Wifi } from "lucide-react";
 import { CircleArrowUp } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 
 const bar = "flex h-6 items-center text-[13px] leading-6 text-white antialiased drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]";
+const icon = { size: 17, strokeWidth: 1.9 };
 
 /// Left part of the macOS menu bar: Apple menu, bold app name, app menus.
 export function MenuBarLeft() {
@@ -23,24 +24,24 @@ export function MenuBarLeft() {
 /// open; the dropdown below shares this column, so it starts exactly under the item.
 export function StatusCluster({ count }: { count: number }) {
   return (
-    <div className={`${bar} justify-end gap-[14px]`}>
-      <span className="flex h-5 items-center gap-1 rounded-[6px] bg-white/25 px-1.5" aria-label={`MacUp: ${count} updates ready`}>
-        {/* Filled when updates are waiting, like the app. */}
-        <CircleArrowUp size={16} strokeWidth={2} className="fill-white text-black/85" aria-hidden />
+    <div className={`${bar} justify-end gap-[16px]`}>
+      <span className="flex h-[22px] items-center gap-1.5 rounded-[6px] bg-white/25 px-1.5" aria-label={`MacUp: ${count} updates ready`}>
+        {/* Filled when updates are waiting, like the app's arrow.up.circle.fill. */}
+        <CircleArrowUp size={18} strokeWidth={2} className="fill-white text-black/85" aria-hidden />
         <span className="text-xs font-semibold tabular-nums">{count}</span>
       </span>
-      <span className="hidden items-center gap-[14px] lg:flex" aria-hidden>
-        <Circle size={15} />
-        <Bell size={15} />
-        <CloudUpload size={16} />
-        <Bluetooth size={15} />
+      <span className="hidden items-center gap-[16px] lg:flex" aria-hidden>
+        <Circle {...icon} />
+        <Bell {...icon} />
+        <CloudUpload {...icon} />
+        <Bluetooth {...icon} />
       </span>
       <ModeToggle />
-      <Wifi size={16} aria-hidden className="hidden sm:block" />
-      <BatteryMedium size={19} aria-hidden className="hidden sm:block" />
-      <Search size={15} aria-hidden className="hidden sm:block" />
-      <SlidersHorizontal size={15} aria-hidden className="hidden sm:block" />
-      <span className="tabular-nums">Tue 9 Sep&nbsp;&nbsp;09:41</span>
+      <Wifi {...icon} aria-hidden className="hidden sm:block" />
+      <BatteryCharging size={19} strokeWidth={1.9} aria-hidden className="hidden sm:block" />
+      <Search {...icon} aria-hidden className="hidden sm:block" />
+      <SlidersHorizontal {...icon} aria-hidden className="hidden sm:block" />
+      <span className="tabular-nums">10 Sep&nbsp;&nbsp;15:39</span>
     </div>
   );
 }

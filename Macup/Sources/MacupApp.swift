@@ -53,7 +53,8 @@ struct MenuBarLabel: View {
     var body: some View {
         HStack(spacing: 3) {
             // Outline when everything is current, filled when updates are waiting.
-            Image(systemName: count > 0 ? "arrow.up.circle.fill" : "arrow.up.circle")
+            // An NSImage template symbol keeps the exact point size; SwiftUI's Image scales status item glyphs down.
+            Image(nsImage: Self.symbol(count > 0 ? "arrow.up.circle.fill" : "arrow.up.circle"))
             if count > 0 && showCount {
                 Text("\(count)")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -61,5 +62,12 @@ struct MenuBarLabel: View {
             }
         }
         .help(count == 0 ? "Everything is up to date" : "\(count) updates ready")
+    }
+
+    private static func symbol(_ name: String) -> NSImage {
+        let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)!.withSymbolConfiguration(config)!
+        image.isTemplate = true
+        return image
     }
 }
