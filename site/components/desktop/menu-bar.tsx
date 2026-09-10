@@ -1,5 +1,4 @@
 import { BatteryCharging, Bell, Bluetooth, Circle, CloudUpload, Search, SlidersHorizontal, Wifi } from "lucide-react";
-import { CircleArrowUp } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 
 const bar = "flex h-7 items-center text-[14px] leading-7 text-white antialiased drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]";
@@ -26,8 +25,11 @@ export function StatusCluster({ count }: { count: number }) {
   return (
     <div className={`${bar} justify-end gap-[16px]`}>
       <span className="flex h-[24px] items-center gap-1.5 rounded-[6px] bg-white/25 px-1.5" aria-label={`MacUp: ${count} updates ready`}>
-        {/* Filled when updates are waiting, like the app's arrow.up.circle.fill. */}
-        <CircleArrowUp size={20} strokeWidth={2} className="fill-white text-black/85" aria-hidden />
+        {/* Filled when updates are waiting, like the app's arrow.up.circle.fill: a solid disc with the arrow cut out. */}
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
+          <circle cx="12" cy="12" r="10" fill="white" />
+          <path d="M12 16.5V8 M8 12l4-4 4 4" fill="none" stroke="#1d1b3a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
         <span className="text-[13px] font-semibold tabular-nums">{count}</span>
       </span>
       <span className="hidden items-center gap-[16px] lg:flex" aria-hidden>
