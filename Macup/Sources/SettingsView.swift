@@ -29,6 +29,17 @@ struct SettingsView: View {
             }
             Section("General") {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
+                Toggle("Notify when updates become ready", isOn: $settings.notificationsEnabled)
+                Toggle("Show the number of updates in the menu bar", isOn: $settings.showMenuBarCount)
+                Toggle("Include Homebrew apps that update themselves", isOn: $settings.brewGreedy)
+                Toggle(isOn: $settings.hideSystemPackages) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Hide packages that belong to macOS")
+                        Text("System Ruby gems, Xcode's Python packages and other root-owned installs. macOS manages these itself and changing them needs an administrator password."
+                             + (store.hiddenSystemCount > 0 ? " Currently hiding \(store.hiddenSystemCount)." : ""))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 LabeledContent("Setup") {
                     Button("Show Setup…") { OnboardingWindow.show(store: store, settings: settings) }.controlSize(.small)
                 }

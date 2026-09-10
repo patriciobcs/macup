@@ -23,6 +23,8 @@ final class Preferences {
     /// Hide packages that belong to macOS itself (system Ruby gems, Xcode Python). Default: on.
     var hideSystemPackages: Bool { didSet { d.set(hideSystemPackages, forKey: "hideSystemPackages") } }
     var hasOnboarded: Bool { didSet { d.set(hasOnboarded, forKey: "hasOnboarded") } }
+    /// Show the number of ready updates next to the menu bar icon. Default: on.
+    var showMenuBarCount: Bool { didSet { d.set(showMenuBarCount, forKey: "showMenuBarCount") } }
 
     var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }
@@ -42,6 +44,7 @@ final class Preferences {
         ignoredPackages = Set(d.stringArray(forKey: "ignoredPackages") ?? [])
         hideSystemPackages = d.object(forKey: "hideSystemPackages") as? Bool ?? true
         hasOnboarded = d.bool(forKey: "hasOnboarded")
+        showMenuBarCount = d.object(forKey: "showMenuBarCount") as? Bool ?? true
     }
 
     var enabledManagers: [Manager] { Manager.allCases.filter { !disabledManagers.contains($0) } }

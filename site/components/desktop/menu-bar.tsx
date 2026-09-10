@@ -1,5 +1,5 @@
 import { BatteryMedium, Bell, Bluetooth, Circle, CloudUpload, Search, SlidersHorizontal, Wifi } from "lucide-react";
-import { Logo } from "@/components/logo";
+import { CircleArrowUp } from "lucide-react";
 import { ModeToggle } from "@/components/mode-toggle";
 
 const bar = "flex h-6 items-center text-[13px] leading-6 text-white antialiased drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]";
@@ -25,7 +25,8 @@ export function StatusCluster({ count }: { count: number }) {
   return (
     <div className={`${bar} justify-end gap-[14px]`}>
       <span className="flex h-5 items-center gap-1 rounded-[6px] bg-white/25 px-1.5" aria-label={`MacUp: ${count} updates ready`}>
-        <Logo size={15} />
+        {/* Filled when updates are waiting, like the app. */}
+        <CircleArrowUp size={16} strokeWidth={2} className="fill-white text-black/85" aria-hidden />
         <span className="text-xs font-semibold tabular-nums">{count}</span>
       </span>
       <span className="hidden items-center gap-[14px] lg:flex" aria-hidden>

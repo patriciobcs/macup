@@ -17,7 +17,7 @@ struct MacupApp: App {
                 .environment(store)
                 .environment(settings)
         } label: {
-            MenuBarLabel(count: store.badgeCount, security: store.securityCount > 0, scanning: store.isScanning)
+            MenuBarLabel(count: store.badgeCount, showCount: settings.showMenuBarCount)
         }
         .menuBarExtraStyle(.window)
 
@@ -48,13 +48,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct MenuBarLabel: View {
     let count: Int
-    let security: Bool
-    let scanning: Bool
+    let showCount: Bool
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: security ? "shippingbox.fill" : "shippingbox")
-            if count > 0 {
+            // Outline when everything is current, filled when updates are waiting.
+            Image(systemName: count > 0 ? "arrow.up.circle.fill" : "arrow.up.circle")
+            if count > 0 && showCount {
                 Text("\(count)")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
