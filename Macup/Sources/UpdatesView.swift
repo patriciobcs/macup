@@ -176,8 +176,10 @@ struct PackageRow: View {
                 }
                 .buttonStyle(.borderless).help("Update failed:\n\(failure)\n\nClick to show the output.")
                 Button("Retry") { Task { await store.upgrade(pkg) } }.controlSize(.small)
-            } else if eligible {
-                Button(pkg.manager.opensExternally ? "Open Settings" : "Update") { Task { await store.upgrade(pkg) } }.controlSize(.small)
+            } else {
+                Button(pkg.manager.opensExternally ? "Open Settings" : "Update") { Task { await store.upgrade(pkg) } }
+                    .controlSize(.small)
+                    .help(eligible ? "Update \(pkg.name)" : "Update now, before the minimum age has passed")
             }
             if pkg.manager.supportsRemoval && !store.isUpgrading(pkg) {
                 Button { confirmAndRemove() } label: { Image(systemName: "trash") }

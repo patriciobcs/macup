@@ -250,12 +250,13 @@ struct PanelRow: View {
                 Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red).font(.title3)
             }
             .buttonStyle(.borderless).help("Update failed:\n\(failure)\n\nClick to see the output. Right-click to retry.")
-        } else if !dimmed {
+        } else {
             Button { Task { await store.upgrade(pkg) } } label: {
                 Image(systemName: pkg.manager.opensExternally ? "arrow.up.forward.app" : "arrow.up.circle").font(.title3)
             }
             .buttonStyle(.borderless)
-            .help(pkg.manager.opensExternally ? "Open Software Update in System Settings" : "Update \(pkg.name)")
+            .help(pkg.manager.opensExternally ? "Open Software Update in System Settings"
+                  : dimmed ? "Update now, before the minimum age has passed" : "Update \(pkg.name)")
         }
     }
 
