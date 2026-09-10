@@ -2,6 +2,7 @@ import { CalendarClock, Download, Hourglass, Radar, Terminal } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { LatestVersion } from "@/components/latest-version";
 import { Logo } from "@/components/logo";
+import { Dock } from "@/components/desktop/dock";
 import { MenuBarLeft, StatusCluster } from "@/components/desktop/menu-bar";
 import { Panel } from "@/components/desktop/panel";
 import { Window } from "@/components/desktop/window";
@@ -30,7 +31,7 @@ export default function Home() {
       <StatusCluster count={demo.count} />
 
       {/* On desktop the window floats centered in its area at a typical app size instead of filling it. */}
-      <main className="col-span-2 flex min-w-0 flex-col gap-4 pt-2 pb-8 lg:col-span-1 lg:items-center lg:justify-center lg:pb-16">
+      <main className="col-span-2 flex min-w-0 flex-col gap-4 pt-2 pb-32 lg:col-span-1 lg:items-center lg:justify-center lg:pb-36">
         {/* Phone: the dropdown is the hero, hanging under the menu bar in a compact form. */}
         <div className="flex justify-end lg:hidden"><Panel compact className="w-full sm:w-[320px]" /></div>
 
@@ -87,6 +88,10 @@ export default function Home() {
       <aside className="hidden pt-1.5 lg:block">
         <Panel />
       </aside>
+
+      <footer className="fixed inset-x-0 bottom-0 z-10 flex justify-center pb-2">
+        <Dock />
+      </footer>
     </div>
   );
 }
