@@ -27,8 +27,14 @@ export function StatusCluster({ count }: { count: number }) {
       <span className="flex h-[24px] items-center gap-1.5 rounded-[6px] bg-white/25 px-1.5" aria-label={`MacUp: ${count} updates ready`}>
         {/* Filled when updates are waiting, like the app's arrow.up.circle.fill: a solid disc with the arrow cut out. */}
         <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
-          <circle cx="12" cy="12" r="10" fill="white" />
-          <path d="M12 16.5V8 M8 12l4-4 4 4" fill="none" stroke="#1d1b3a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          <defs>
+            {/* The arrow is a hole in the disc, so whatever is behind the pill shows through. */}
+            <mask id="macup-arrow-cutout">
+              <rect width="24" height="24" fill="white" />
+              <path d="M12 16.5V8 M8 12l4-4 4 4" fill="none" stroke="black" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </mask>
+          </defs>
+          <circle cx="12" cy="12" r="10" fill="white" mask="url(#macup-arrow-cutout)" />
         </svg>
         <span className="text-[13px] font-semibold tabular-nums">{count}</span>
       </span>
