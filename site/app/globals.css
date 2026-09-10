@@ -172,31 +172,32 @@
   }
 }
 
-/* macOS Tahoe-style wallpaper: layered soft gradients, deeper in dark mode. */
+/* Wallpaper: blues only, from sky at the top to deep navy at the bottom, deeper in dark mode. */
 .wallpaper {
-  background-color: oklch(0.45 0.16 250);
+  background-color: oklch(0.55 0.14 245);
   background-image:
-    radial-gradient(ellipse 70% 60% at 15% 10%, oklch(0.78 0.12 200 / 0.9), transparent 60%),
-    radial-gradient(ellipse 60% 70% at 85% 25%, oklch(0.62 0.20 300 / 0.8), transparent 65%),
-    radial-gradient(ellipse 80% 50% at 50% 100%, oklch(0.70 0.17 25 / 0.6), transparent 60%),
-    linear-gradient(180deg, oklch(0.55 0.17 255), oklch(0.35 0.14 275));
+    radial-gradient(ellipse 75% 55% at 20% 0%, oklch(0.88 0.08 220 / 0.95), transparent 60%),
+    radial-gradient(ellipse 60% 60% at 85% 20%, oklch(0.72 0.14 235 / 0.9), transparent 65%),
+    radial-gradient(ellipse 90% 50% at 50% 105%, oklch(0.30 0.12 262 / 0.9), transparent 60%),
+    linear-gradient(180deg, oklch(0.70 0.13 230), oklch(0.38 0.14 258));
   background-attachment: fixed;
 }
 .dark .wallpaper {
-  background-color: oklch(0.22 0.08 265);
+  background-color: oklch(0.28 0.09 258);
   background-image:
-    radial-gradient(ellipse 70% 60% at 15% 10%, oklch(0.45 0.12 210 / 0.8), transparent 60%),
-    radial-gradient(ellipse 60% 70% at 85% 25%, oklch(0.38 0.16 300 / 0.8), transparent 65%),
-    radial-gradient(ellipse 80% 50% at 50% 100%, oklch(0.40 0.14 20 / 0.6), transparent 60%),
-    linear-gradient(180deg, oklch(0.30 0.10 260), oklch(0.16 0.06 275));
+    radial-gradient(ellipse 75% 55% at 20% 0%, oklch(0.55 0.12 225 / 0.85), transparent 60%),
+    radial-gradient(ellipse 60% 60% at 85% 20%, oklch(0.42 0.13 240 / 0.85), transparent 65%),
+    radial-gradient(ellipse 90% 50% at 50% 105%, oklch(0.14 0.07 265 / 0.95), transparent 60%),
+    linear-gradient(180deg, oklch(0.36 0.11 240), oklch(0.17 0.08 262));
 }
 @media (prefers-color-scheme: dark) {
   :root:not(.light) .wallpaper {
-    background-color: oklch(0.22 0.08 265);
+    background-color: oklch(0.28 0.09 258);
     background-image:
-      radial-gradient(ellipse 70% 60% at 15% 10%, oklch(0.45 0.12 210 / 0.8), transparent 60%),
-      radial-gradient(ellipse 60% 70% at 85% 25%, oklch(0.38 0.16 300 / 0.8), transparent 65%),
-      radial-gradient(ellipse 80% 50% at 50% 100%, oklch(0.40 0.14 20 / 0.6), transparent 60%),
-      linear-gradient(180deg, oklch(0.30 0.10 260), oklch(0.16 0.06 275));
+      radial-gradient(ellipse 75% 55% at 20% 0%, oklch(0.55 0.12 225 / 0.85), transparent 60%),
+      radial-gradient(ellipse 60% 60% at 85% 20%, oklch(0.42 0.13 240 / 0.85), transparent 65%),
+      radial-gradient(ellipse 90% 50% at 50% 105%, oklch(0.14 0.07 265 / 0.95), transparent 60%),
+      linear-gradient(180deg, oklch(0.36 0.11 240), oklch(0.17 0.08 262));
   }
+}
 }
