@@ -172,35 +172,28 @@
   }
 }
 
-/* Wallpaper: blues only, from sky at the top to deep navy at the bottom, deeper in dark mode. */
+/* Wallpaper: blues only, dark navy at the top (behind the white menu bar) to sky blue at the bottom. */
 .wallpaper {
-  /* Deep at the very top so the white menu bar stays legible; the sky-blue glow sits below it. */
-  background-color: oklch(0.50 0.14 248);
+  background-color: oklch(0.45 0.13 250);
   background-image:
-    linear-gradient(180deg, oklch(0.30 0.10 255 / 0.9) 0, oklch(0.30 0.10 255 / 0) 120px),
-    radial-gradient(ellipse 70% 50% at 15% 35%, oklch(0.82 0.10 220 / 0.9), transparent 60%),
-    radial-gradient(ellipse 60% 55% at 85% 45%, oklch(0.66 0.15 236 / 0.9), transparent 65%),
-    radial-gradient(ellipse 90% 50% at 50% 105%, oklch(0.28 0.12 262 / 0.9), transparent 60%),
-    linear-gradient(180deg, oklch(0.58 0.14 240), oklch(0.36 0.14 258));
+    radial-gradient(ellipse 70% 50% at 20% 100%, oklch(0.88 0.08 218 / 0.95), transparent 60%),
+    radial-gradient(ellipse 60% 55% at 85% 80%, oklch(0.72 0.14 232 / 0.9), transparent 65%),
+    linear-gradient(180deg, oklch(0.24 0.10 262), oklch(0.42 0.14 250) 45%, oklch(0.68 0.13 230));
   background-attachment: fixed;
 }
 .dark .wallpaper {
-  background-color: oklch(0.28 0.09 258);
+  background-color: oklch(0.24 0.08 260);
   background-image:
-    linear-gradient(180deg, oklch(0.16 0.07 262 / 0.9) 0, oklch(0.16 0.07 262 / 0) 120px),
-    radial-gradient(ellipse 70% 50% at 15% 35%, oklch(0.50 0.12 225 / 0.85), transparent 60%),
-    radial-gradient(ellipse 60% 55% at 85% 45%, oklch(0.40 0.13 240 / 0.85), transparent 65%),
-    radial-gradient(ellipse 90% 50% at 50% 105%, oklch(0.14 0.07 265 / 0.95), transparent 60%),
-    linear-gradient(180deg, oklch(0.36 0.11 240), oklch(0.17 0.08 262));
+    radial-gradient(ellipse 70% 50% at 20% 100%, oklch(0.52 0.12 222 / 0.85), transparent 60%),
+    radial-gradient(ellipse 60% 55% at 85% 80%, oklch(0.40 0.13 240 / 0.85), transparent 65%),
+    linear-gradient(180deg, oklch(0.13 0.06 265), oklch(0.22 0.09 258) 45%, oklch(0.36 0.11 240));
 }
 @media (prefers-color-scheme: dark) {
   :root:not(.light) .wallpaper {
-    background-color: oklch(0.28 0.09 258);
+    background-color: oklch(0.24 0.08 260);
     background-image:
-      linear-gradient(180deg, oklch(0.16 0.07 262 / 0.9) 0, oklch(0.16 0.07 262 / 0) 120px),
-      radial-gradient(ellipse 70% 50% at 15% 35%, oklch(0.50 0.12 225 / 0.85), transparent 60%),
-      radial-gradient(ellipse 60% 55% at 85% 45%, oklch(0.40 0.13 240 / 0.85), transparent 65%),
-      radial-gradient(ellipse 90% 50% at 50% 105%, oklch(0.14 0.07 265 / 0.95), transparent 60%),
-      linear-gradient(180deg, oklch(0.36 0.11 240), oklch(0.17 0.08 262));
+      radial-gradient(ellipse 70% 50% at 20% 100%, oklch(0.52 0.12 222 / 0.85), transparent 60%),
+      radial-gradient(ellipse 60% 55% at 85% 80%, oklch(0.40 0.13 240 / 0.85), transparent 65%),
+      linear-gradient(180deg, oklch(0.13 0.06 265), oklch(0.22 0.09 258) 45%, oklch(0.36 0.11 240));
   }
 }
