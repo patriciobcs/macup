@@ -174,11 +174,11 @@
 
 /* Wallpaper tokens: a daytime sky in light mode, a night sky in dark mode. One rule, two palettes. */
 :root {
-  --wp-top: oklch(0.32 0.11 262);
-  --wp-mid: oklch(0.55 0.15 245);
-  --wp-low: oklch(0.78 0.10 225);
-  --wp-bottom: oklch(0.92 0.04 215);
-  --wp-glow: oklch(0.97 0.02 210 / 0.7);
+  --wp-top: oklch(0.30 0.11 262);
+  --wp-mid: oklch(0.48 0.15 250);
+  --wp-low: oklch(0.62 0.14 235);
+  --wp-bottom: oklch(0.70 0.12 222);
+  --wp-glow: oklch(0.82 0.09 210 / 0.55);
 }
 .dark {
   --wp-top: oklch(0.11 0.04 270);
