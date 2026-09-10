@@ -30,6 +30,9 @@ targets:
         type: folder
         buildPhase: resources
       - path: Macup/Resources/Assets.xcassets
+      - path: Macup/Resources/MacUp.icon
+        type: file
+        buildPhase: resources
     info:
       path: Macup/Info.plist
       properties:
@@ -52,7 +55,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.patriciobcs.macup
         PRODUCT_NAME: MacUp
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_APPICON_NAME: MacUp
         PRODUCT_MODULE_NAME: Macup
         INFOPLIST_KEY_LSUIElement: YES
         GENERATE_INFOPLIST_FILE: NO

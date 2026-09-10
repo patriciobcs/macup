@@ -8,6 +8,12 @@ export const metadata: Metadata = {
   description:
     "MacUp is a free, open source macOS menu bar app that finds the package managers on your Mac, shows what is outdated, and updates it in one click.",
   openGraph: { title: site.name, description: site.tagline, type: "website" },
+  icons: {
+    icon: [
+      { url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon-light.png`, media: "(prefers-color-scheme: light)" },
+      { url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon-dark.png`, media: "(prefers-color-scheme: dark)" },
+    ],
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
