@@ -172,28 +172,34 @@
   }
 }
 
-/* Wallpaper: blues only, dark navy at the top (behind the white menu bar) to sky blue at the bottom. */
-.wallpaper {
-  background-color: oklch(0.45 0.13 250);
-  background-image:
-    radial-gradient(ellipse 70% 50% at 20% 100%, oklch(0.88 0.08 218 / 0.95), transparent 60%),
-    radial-gradient(ellipse 60% 55% at 85% 80%, oklch(0.72 0.14 232 / 0.9), transparent 65%),
-    linear-gradient(180deg, oklch(0.24 0.10 262), oklch(0.42 0.14 250) 45%, oklch(0.68 0.13 230));
-  background-attachment: fixed;
+/* Wallpaper tokens: a daytime sky in light mode, a night sky in dark mode. One rule, two palettes. */
+:root {
+  --wp-top: oklch(0.32 0.11 262);
+  --wp-mid: oklch(0.55 0.15 245);
+  --wp-low: oklch(0.78 0.10 225);
+  --wp-bottom: oklch(0.92 0.04 215);
+  --wp-glow: oklch(0.97 0.02 210 / 0.7);
 }
-.dark .wallpaper {
-  background-color: oklch(0.24 0.08 260);
-  background-image:
-    radial-gradient(ellipse 70% 50% at 20% 100%, oklch(0.52 0.12 222 / 0.85), transparent 60%),
-    radial-gradient(ellipse 60% 55% at 85% 80%, oklch(0.40 0.13 240 / 0.85), transparent 65%),
-    linear-gradient(180deg, oklch(0.13 0.06 265), oklch(0.22 0.09 258) 45%, oklch(0.36 0.11 240));
+.dark {
+  --wp-top: oklch(0.11 0.04 270);
+  --wp-mid: oklch(0.18 0.07 265);
+  --wp-low: oklch(0.27 0.09 250);
+  --wp-bottom: oklch(0.36 0.09 230);
+  --wp-glow: oklch(0.55 0.10 215 / 0.35);
 }
 @media (prefers-color-scheme: dark) {
-  :root:not(.light) .wallpaper {
-    background-color: oklch(0.24 0.08 260);
-    background-image:
-      radial-gradient(ellipse 70% 50% at 20% 100%, oklch(0.52 0.12 222 / 0.85), transparent 60%),
-      radial-gradient(ellipse 60% 55% at 85% 80%, oklch(0.40 0.13 240 / 0.85), transparent 65%),
-      linear-gradient(180deg, oklch(0.13 0.06 265), oklch(0.22 0.09 258) 45%, oklch(0.36 0.11 240));
+  :root:not(.light) {
+    --wp-top: oklch(0.11 0.04 270);
+    --wp-mid: oklch(0.18 0.07 265);
+    --wp-low: oklch(0.27 0.09 250);
+    --wp-bottom: oklch(0.36 0.09 230);
+    --wp-glow: oklch(0.55 0.10 215 / 0.35);
   }
+}
+.wallpaper {
+  background-color: var(--wp-mid);
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% 100%, var(--wp-glow), transparent 70%),
+    linear-gradient(180deg, var(--wp-top) 0%, var(--wp-mid) 38%, var(--wp-low) 74%, var(--wp-bottom) 100%);
+  background-attachment: fixed;
 }
