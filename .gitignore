@@ -1,0 +1,13 @@
+build/
+dist/
+*.xcuserdata/
+xcuserdata/
+.DS_Store
+Macup.xcodeproj/
+
+# site
+site/node_modules/
+site/.next/
+site/out/
+site/next-env.d.ts
+site/*.tsbuildinfo

@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  app:
+    name: Build app and unit tests (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select newest Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -n1)/Contents/Developer" && xcodebuild -version
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= test 2>&1 | tee build.log | grep -E "error:|Test Case .* failed|Executed .* tests|TEST" || true
+          grep -q "TEST SUCCEEDED" build.log
+      - name: Script syntax
+        run: find Macup/Resources/Scripts tests -name '*.sh' -exec zsh -n {} \;
+
+  scripts-macos:
+    name: Package manager integrations (macOS)
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install managers and pin old packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tests/macos/setup.sh
+      - name: Scan, upgrade, remove, verify
+        env:
+          # Shared runners exhaust GitHub's anonymous API limit; tools like uv honour these.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UV_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: tests/macos/run-tests.sh
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-upgrade-logs
+          path: /tmp/*-*.log
+          if-no-files-found: ignore
+
+  scripts-linux:
+    name: Package manager integrations (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build bench image
+        run: docker build -t macup-test -f tests/docker/Dockerfile .
+      - name: Run
+        run: docker run --rm macup-test

@@ -1,0 +1,18 @@
+name: Package manager request
+description: Support for a manager MacUp does not cover yet
+labels: [enhancement]
+body:
+  - type: input
+    id: manager
+    attributes:
+      label: Package manager
+      placeholder: e.g. asdf
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands
+      description: How it lists outdated packages, upgrades one, and removes one. Include sample output if you can.
+    validations:
+      required: true

@@ -1,0 +1,27 @@
+name: Bug report
+description: Something did not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what MacUp did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details from MacUp
+      description: In MacUp, use "Copy Details" on the error (or "Copy Error" on a failed package) and paste here. It includes the manager, versions and the command output.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: MacUp and macOS versions
+      placeholder: MacUp 1.0.0, macOS 15.6
+  - type: dropdown
+    id: install
+    attributes:
+      label: How MacUp was installed
+      options: [Homebrew cask, Downloaded dmg, Built from source]
