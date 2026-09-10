@@ -25,7 +25,7 @@ export default function Home() {
   return (
     // One grid for menu bar and desktop: the second column is as wide as the status cluster, so the
     // open dropdown sits exactly under the MacUp item and the window keeps the rest of the width.
-    <div className="wallpaper grid min-h-screen grid-cols-[minmax(0,1fr)_auto] grid-rows-[1.5rem_1fr] gap-x-4 px-4 text-foreground lg:gap-x-6 lg:px-6">
+    <div className="wallpaper grid min-h-screen grid-cols-[minmax(0,1fr)_auto] grid-rows-[1.75rem_1fr] pt-1 gap-x-4 px-4 text-foreground lg:gap-x-6 lg:px-6">
       <MenuBarLeft />
       <StatusCluster count={demo.count} />
 
