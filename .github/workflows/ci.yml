@@ -43,7 +43,8 @@ jobs:
     name: Build app and unit tests (macOS)
     needs: changes
     if: needs.changes.outputs.app == 'true'
-    runs-on: macos-15
+    # The Icon Composer app icon needs a current Xcode; macos-26 carries the same toolchain as development.
+    runs-on: macos-26
     timeout-minutes: 25
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
@@ -51,7 +52,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -n1)/Contents/Developer" && xcodebuild -version
+        # Newest release Xcode on the image, skipping betas.
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | grep -vi beta | sort -V | tail -n1)/Contents/Developer" && xcodebuild -version
       - name: Install tools
         run: brew install --quiet xcodegen swiftlint
       - name: Format check
@@ -114,16 +116,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
       - name: Build bench image
-        # Layers are cached between runs; a script-only change rebuilds in well under a minute.
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: tests/docker/Dockerfile
-          tags: macup-test:latest
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        # A plain build takes about four minutes; exporting this multi-gigabyte image to the Actions
+        # cache took far longer, so the job relies on the change filter instead of layer caching.
+        run: docker build -t macup-test -f tests/docker/Dockerfile .
       - name: Run
-        run: docker run --rm macup-test:latest
+        run: docker run --rm macup-test

@@ -278,8 +278,13 @@ scan_tools() {
     bin=$(command -v "$name"); real=$(realpath "$bin" 2>/dev/null || print -r -- "$bin")
     [[ -n "$brewp" && "$real" == "$brewp"/* ]] && continue
     case "$real" in
-      */node_modules/*|*/corepack/*|/nix/store/*|*/.rustup/*|*/.cargo/bin/*|*/mise/*|*/.asdf/*|/opt/local/*|/usr/local/Cellar/*) continue ;;
+      */node_modules/*|*/corepack/*|/nix/store/*|*/.rustup/*|*/mise/*|*/.asdf/*|/opt/local/*|/usr/local/Cellar/*) continue ;;
       */pipx/venvs/*|*/site-packages/*|*/Python.framework/*|*/.local/share/uv/tools/*|*/.volta/*) continue ;;
+    esac
+    # ~/.cargo/bin holds both `cargo install`ed crates (Cargo's job) and binaries older curl installers
+    # dropped there (ours). Cargo's own registry of installed binaries tells them apart.
+    case "$real" in
+      */.cargo/bin/*) grep -qs "\"$name\"" "${CARGO_HOME:-$HOME/.cargo}/.crates2.json" && continue ;;
     esac
     cur=$(self_version "$name"); [[ -z "$cur" ]] && continue
     found=1
