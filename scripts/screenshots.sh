@@ -7,5 +7,6 @@ xcodegen generate >/dev/null
 xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' -derivedDataPath build \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= build 2>&1 | grep -E "error:|BUILD"
 out="$PWD/site/public/screenshots"; mkdir -p "$out"
-MACUP_SCREENSHOTS="$out" build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
+LLVM_PROFILE_FILE="${TMPDIR:-/tmp}/macup-shots.profraw" MACUP_SCREENSHOTS="$out" \
+  build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
 ls -1 "$out"

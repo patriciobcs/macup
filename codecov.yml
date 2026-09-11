@@ -1,0 +1,27 @@
+# Coverage comes from the Swift unit tests, which need macOS. CI does not run macOS runners, so
+# scripts/check.sh produces and uploads the report from a maintainer's machine (see CONTRIBUTING.md).
+# Statuses are informational: a report is not attached to every commit, so it must never block a PR.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+# unit: the XCTest suite. render: the offscreen draw of every view, which is the only thing that
+# runs SwiftUI view bodies. See CONTRIBUTING.md.
+flags:
+  unit:
+    paths:
+      - Macup/Sources
+  render:
+    paths:
+      - Macup/Sources/Views
+
+ignore:
+  - MacupTests
+  - tests
+  - site
+  - scripts

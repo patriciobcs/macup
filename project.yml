@@ -82,3 +82,5 @@ schemes:
     test:
       config: Debug
       targets: [MacupTests]
+      gatherCoverageData: true
+      coverageTargets: [Macup]
