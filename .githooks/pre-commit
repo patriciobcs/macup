@@ -1,0 +1,22 @@
+#!/bin/zsh
+# Runs the same checks CI runs, only for what is staged. Enable once: git config core.hooksPath .githooks
+set -e
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+fail() { echo "pre-commit: $1" >&2; exit 1; }
+
+if print -l $staged | grep -qE '^(Macup/Sources|MacupTests)/.*\.swift$'; then
+  swift format lint --strict --recursive Macup/Sources MacupTests || fail "swift format found issues (run: swift format --in-place --recursive Macup/Sources MacupTests)"
+  command -v swiftlint >/dev/null && { swiftlint --strict --quiet || fail "swiftlint found issues"; }
+fi
+
+if print -l $staged | grep -qE '\.sh$'; then
+  for f in ${(f)"$(print -l $staged | grep -E '\.sh$')"}; do zsh -n "$f" || fail "syntax error in $f"; done
+fi
+
+if print -l $staged | grep -qE '^site/' && [[ -d site/node_modules ]]; then
+  (cd site && npm run --silent check) || fail "site checks failed (npm run check in site/)"
+fi
+
+if print -l $staged | grep -qE '^\.github/.*\.ya?ml$'; then
+  (cd site && npx --yes --silent yaml-lint $(print -l $staged | grep -E '^\.github/.*\.ya?ml$' | sed 's#^#../#') >/dev/null) || fail "workflow yaml invalid"
+fi
