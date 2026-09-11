@@ -82,7 +82,7 @@ The app can still draw all of its views offscreen from sample data (`Screenshots
 
 ## Release
 
-Maintainers only. One-time setup on the releasing Mac: a Developer ID Application certificate, `xcrun notarytool store-credentials macup-notary`, Sparkle's `generate_keys`, and `gh` authenticated with push access to this repository and the tap. Then:
+Maintainers only. One-time setup on the releasing Mac: a Developer ID Application certificate, `xcrun notarytool store-credentials macup-notary`, Sparkle's `generate_keys`, `brew install create-dmg`, and `gh` authenticated with push access to this repository and the tap. Then:
 
 ```sh
 TEAM_ID=XXXXXXXXXX scripts/release.sh

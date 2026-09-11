@@ -71,8 +71,15 @@ xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait
 xcrun stapler staple "$APP"
 rm -f "$ZIP"; ditto -c -k --keepParent "$APP" "$ZIP"
 
+# The installer window: the app on the left, Applications on the right, an arrow between them.
 DMG="$OUT/MacUp.dmg"
-hdiutil create -volname MacUp -srcfolder "$APP" -ov -format UDZO "$DMG" >/dev/null
+rm -rf "$OUT/dmg"; mkdir -p "$OUT/dmg"; cp -R "$APP" "$OUT/dmg/"
+command -v create-dmg >/dev/null || { echo "create-dmg is missing (brew install create-dmg)" >&2; exit 1; }
+# Signed as well as notarized: a stapled ticket alone leaves the image itself without a signature.
+create-dmg --volname MacUp --window-pos 200 120 --window-size 600 400 --icon-size 128 \
+  --background scripts/dmg-background.png --codesign "Developer ID Application" \
+  --icon MacUp.app 150 190 --hide-extension MacUp.app --app-drop-link 450 190 \
+  "$DMG" "$OUT/dmg" >/dev/null
 xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
 xcrun stapler staple "$DMG"
 spctl -a -vv --type exec "$APP" 2>&1 | tail -2
