@@ -2,57 +2,101 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
+# A newer push to the same branch cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  app:
-    name: Build app and unit tests (macOS)
-    runs-on: macos-15
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+      scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - uses: actions/checkout@v4
-      - name: Select newest Xcode
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            app:
+              - 'Macup/**'
+              - 'MacupTests/**'
+              - 'project.yml'
+              - '.swift-format'
+              - '.swiftlint.yml'
+              - '.github/workflows/ci.yml'
+            scripts:
+              - 'Macup/Resources/Scripts/**'
+              - 'tests/**'
+              - '.github/workflows/ci.yml'
+
+  app:
+    name: Build app and unit tests (macOS)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -n1)/Contents/Developer" && xcodebuild -version
       - name: Install tools
-        run: brew install xcodegen swiftlint
+        run: brew install --quiet xcodegen swiftlint
       - name: Format check
         run: swift format lint --strict --recursive Macup/Sources MacupTests
       - name: SwiftLint
         run: swiftlint --strict --quiet
       - name: Generate project
         run: xcodegen generate
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .spm
+          key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
       - name: Build and test
         run: |
           set -o pipefail
           xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' \
-            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= test 2>&1 | tee build.log | grep -E "error:|Test Case .* failed|Executed .* tests|TEST" || true
+            -clonedSourcePackagesDirPath .spm -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= test 2>&1 \
+            | tee build.log | grep -E "error:|Test Case .* failed|Executed .* tests|TEST" || true
           grep -q "TEST SUCCEEDED" build.log
       - name: Render every view from fixtures
         # Draws the panel, window and Settings offscreen; a crash in any view fails here.
         run: |
-          app=$(find ~/Library/Developer/Xcode/DerivedData build -name MacUp.app -path '*Debug*' 2>/dev/null | head -n1)
-          MACUP_SCREENSHOTS="$RUNNER_TEMP/shots" "$app/Contents/MacOS/MacUp"
+          MACUP_SCREENSHOTS="$RUNNER_TEMP/shots" build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
           test "$(ls "$RUNNER_TEMP/shots"/*.png | wc -l)" -eq 6
       - name: Script syntax
         run: find Macup/Resources/Scripts tests -name '*.sh' -exec zsh -n {} \;
 
   scripts-macos:
     name: Package manager integrations (macOS)
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true'
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 45
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      UV_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - name: Install managers and pin old packages
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: tests/macos/setup.sh
       - name: Scan, upgrade, remove, verify
-        env:
-          # Shared runners exhaust GitHub's anonymous API limit; tools like uv honour these.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          UV_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: tests/macos/run-tests.sh
       - name: Upload logs
         if: always()
@@ -64,11 +108,22 @@ jobs:
 
   scripts-linux:
     name: Package manager integrations (Linux)
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - name: Build bench image
-        run: docker build -t macup-test -f tests/docker/Dockerfile .
+        # Layers are cached between runs; a script-only change rebuilds in well under a minute.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: tests/docker/Dockerfile
+          tags: macup-test:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Run
-        run: docker run --rm macup-test
+        run: docker run --rm macup-test:latest
