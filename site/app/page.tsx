@@ -119,8 +119,9 @@ export default function Home() {
       </main>
 
       {/* The open dropdown, left-aligned with its status item directly above. */}
+      {/* The panel fills the status-cluster column, so its edges match the cluster's at any width. */}
       <aside className="hidden pt-1.5 lg:block">
-        <Panel />
+        <Panel className="lg:w-full" />
       </aside>
     </div>
   );
