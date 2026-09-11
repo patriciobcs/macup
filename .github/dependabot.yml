@@ -12,6 +12,9 @@ updates:
       # eslint-config-next does not support ESLint 10 yet; take the major when Next does.
       - dependency-name: eslint
         update-types: ["version-update:semver-major"]
+      # typescript-eslint (via eslint-config-next) does not run on TypeScript 7 yet.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
