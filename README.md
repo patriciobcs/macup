@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="site/public/screenshots/readme.jpg" width="820" alt="MacUp open in the menu bar with its dropdown listing outdated packages">
+  <img src="site/public/screenshots/readme.png" width="820" alt="MacUp open in the menu bar with its dropdown listing outdated packages">
 </p>
 
 <h1 align="center">MacUp</h1>

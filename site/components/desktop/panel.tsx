@@ -4,13 +4,13 @@ import { demo } from "@/lib/demo";
 
 /// The MacUp dropdown, open, as live HTML with the sample data the app also renders in its screenshots.
 /// Sizes and spacing follow the app: 15 pt title, 13 pt rows, 11 pt captions, 30 pt icons, 14 pt margins.
-/// `compact` shows the first manager only plus a "more" row, for small screens.
+/// `compact` shows the first manager only plus a "more" row, for small screens. The caller sets the width.
 export function Panel({ compact = false, className = "" }: { compact?: boolean; className?: string }) {
   const sections = compact ? demo.sections.slice(0, 1) : demo.sections;
   const more = demo.sections.slice(1).reduce((n, s) => n + s.rows.length, 0);
   return (
     <div
-      className={`bg-background/90 w-[320px] max-w-full rounded-[12px] py-1.5 text-[13px] leading-[1.25] tracking-normal antialiased shadow-[0_18px_50px_rgba(0,0,0,0.45)] ring-1 ring-white/15 backdrop-blur-2xl ${className}`}
+      className={`bg-background/90 rounded-[12px] py-1.5 text-[13px] leading-[1.25] tracking-normal antialiased shadow-[0_18px_50px_rgba(0,0,0,0.45)] ring-1 ring-white/15 backdrop-blur-2xl ${className}`}
     >
       <div className="flex items-center justify-between px-[14px] pt-2 pb-2.5">
         <div>

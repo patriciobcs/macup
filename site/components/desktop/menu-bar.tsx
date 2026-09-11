@@ -30,7 +30,8 @@ export function MenuBarLeft() {
         <path d="M14.1 10.6c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.6.9-.7 0-1.9-.8-3.1-.8C3.7 5.4 1.1 7.5 1.1 11.5c0 1.2.2 2.5.7 3.8.6 1.7 2.6 5.5 4.7 5.5 1.1 0 1.9-.8 3.3-.8s2.1.8 3.4.8c2.1 0 3.9-3.5 4.5-5.2-2.9-1.4-3.6-3.9-3.6-5zM11.6 3.9c.7-.8 1.1-1.9 1-3-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 2.9 1.1.1 2.2-.6 2.9-1.4z" />
       </svg>
       <span className="font-bold">MacUp</span>
-      <span className="hidden gap-[22px] sm:flex" aria-hidden>
+      {/* App menus only where the bar has room; below desktop width the bar keeps just the name, like on a phone. */}
+      <span className="hidden gap-[22px] lg:flex" aria-hidden>
         <span>File</span>
         <span>Edit</span>
         <span>View</span>

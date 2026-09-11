@@ -40,12 +40,14 @@ export default function Home() {
       {/* Like macOS: the dropdown's left edge sits on the status item's left edge at a fixed width. The
           aside is zero-width so it never widens the column; the panel simply overflows to the right. */}
       <aside className="col-start-2 row-start-2 hidden w-0 pt-1.5 sm:block">
-        <Panel className="w-[320px]" />
+        {/* Tablet widths get the shorter content; desktop the full list. Same 320 px anchor either way. */}
+        <Panel compact className="w-[320px] shrink-0 lg:hidden" />
+        <Panel className="hidden w-[320px] shrink-0 lg:block" />
       </aside>
 
       {/* Tablets: the window sits under the dropdown. Desktop: beside it, centered at a typical app size. */}
       <main className="col-span-2 row-start-3 flex min-w-0 flex-col gap-4 pt-2 pb-8 lg:col-span-1 lg:col-start-1 lg:row-span-2 lg:row-start-2 lg:items-center lg:justify-center lg:pb-16">
-        {/* Phone: the dropdown is the hero, hanging under the menu bar in a compact form. */}
+        {/* Phone: the compact dropdown is the hero, full width under the menu bar. */}
         <div className="sm:hidden">
           <Panel compact className="w-full" />
         </div>
