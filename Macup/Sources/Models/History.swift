@@ -35,7 +35,8 @@ final class History {
     init(directory: URL) {
         url = directory.appendingPathComponent("history.json")
         if let data = try? Data(contentsOf: url),
-           let saved = try? JSONDecoder.iso.decode([ActionRecord].self, from: data) {
+            let saved = try? JSONDecoder.iso.decode([ActionRecord].self, from: data)
+        {
             records = saved
         }
     }
@@ -46,7 +47,10 @@ final class History {
         save()
     }
 
-    func clear() { records = []; save() }
+    func clear() {
+        records = []
+        save()
+    }
 
     private func save() {
         guard FileManager.default.fileExists(atPath: url.deletingLastPathComponent().path) else { return }

@@ -15,7 +15,16 @@ export function ModeToggle() {
   const { setTheme } = useTheme();
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-xs" className="text-current hover:bg-white/20 hover:text-current" aria-label="Change theme" />}>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="text-current hover:bg-white/20 hover:text-current"
+            aria-label="Change theme"
+          />
+        }
+      >
         <Sun className="size-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
         <Moon className="absolute size-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
       </DropdownMenuTrigger>

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Macup
 
 final class VersionTests: XCTestCase {

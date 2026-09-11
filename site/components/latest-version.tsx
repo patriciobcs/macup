@@ -23,7 +23,7 @@ export function LatestVersion() {
 
   if (!tag) return null;
   return (
-    <a href={site.releases} className="underline-offset-4 hover:text-foreground hover:underline">
+    <a href={site.releases} className="hover:text-foreground underline-offset-4 hover:underline">
       Latest {tag}
     </a>
   );

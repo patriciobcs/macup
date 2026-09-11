@@ -74,7 +74,9 @@ xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' 
   CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO test
 ```
 
-`project.yml` is the source of truth; the generated Xcode project is not committed.
+`project.yml` is the source of truth; the generated Xcode project and Info.plist are not committed.
+
+Formatting and linting: `swift format --in-place --recursive Macup/Sources MacupTests` and `swiftlint` for the app (`brew install swiftlint`), `npm run check` inside `site/` for the website (ESLint, TypeScript, Prettier). CI enforces all of them.
 
 The app is a SwiftUI shell around three zsh scripts in `Macup/Resources/Scripts`: `macup-scan.sh` runs every manager's own outdated command concurrently and prints one tab-separated line per package, and `macup-upgrade.sh` and `macup-remove.sh` map a manager and package to the right command. The scripts inherit your login shell's environment, so they see the same tools you do in Terminal. The app parses the output, resolves dates and advisories from public registries with an on-disk cache, and decides what is eligible to show.
 

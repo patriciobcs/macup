@@ -24,11 +24,15 @@ struct UpdatesView: View {
             if store.isScanning {
                 ProgressView().controlSize(.small)
             } else {
-                Button { Task { await store.scan() } } label: { Image(systemName: "arrow.clockwise") }
-                    .buttonStyle(.borderless).help("Check now")
+                Button {
+                    Task { await store.scan() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless).help("Check now")
             }
         }
-        .padding(.horizontal, 12).frame(height: 44)   // same height as the output pane's header so the dividers line up
+        .padding(.horizontal, 12).frame(height: 44)  // same height as the output pane's header so the dividers line up
     }
 
     private var title: String {
@@ -54,7 +58,8 @@ struct UpdatesView: View {
                     }
                     if !waiting.isEmpty { waitingSection(waiting) }
                     if let err = store.scanError {
-                        Label(err, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.caption).padding(12)
+                        Label(err, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.caption)
+                            .padding(12)
                     }
                     if store.isOffline { OfflineRow() }
                     ForEach(store.problems) { ProblemRow(report: $0) }
@@ -106,7 +111,8 @@ struct UpdatesView: View {
     private var footer: some View {
         HStack {
             if let last = store.lastScan {
-                Text("Checked \(last, format: .relative(presentation: .named))").font(.caption).foregroundStyle(.secondary)
+                Text("Checked \(last, format: .relative(presentation: .named))").font(.caption).foregroundStyle(
+                    .secondary)
             }
             Spacer()
             if store.updatableCount > 0 {
@@ -132,10 +138,16 @@ struct PackageRow: View {
                 Button("Remove \(pkg.name)…") { confirmAndRemove() }
             }
             if let failure = store.failure(for: pkg) {
-                Button("Copy Error") { Support.copy(Support.details(title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure)) }
+                Button("Copy Error") {
+                    Support.copy(
+                        Support.details(title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure))
+                }
                 Button("Report on GitHub…") {
-                    NSWorkspace.shared.open(Support.issueURL(title: "\(pkg.manager.title): update of \(pkg.name) failed",
-                                                             body: Support.details(title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure)))
+                    NSWorkspace.shared.open(
+                        Support.issueURL(
+                            title: "\(pkg.manager.title): update of \(pkg.name) failed",
+                            body: Support.details(
+                                title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure)))
                 }
             }
         }
@@ -171,7 +183,9 @@ struct PackageRow: View {
             if store.isUpgrading(pkg) {
                 ProgressView().controlSize(.small)
             } else if let failure = store.failure(for: pkg) {
-                Button { store.reveal(pkg) } label: {
+                Button {
+                    store.reveal(pkg)
+                } label: {
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
                 }
                 .buttonStyle(.borderless).help("Update failed:\n\(failure)\n\nClick to show the output.")
@@ -182,8 +196,12 @@ struct PackageRow: View {
                     .help(eligible ? "Update \(pkg.name)" : "Update now, before the minimum age has passed")
             }
             if pkg.manager.supportsRemoval && !store.isUpgrading(pkg) {
-                Button { confirmAndRemove() } label: { Image(systemName: "trash") }
-                    .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove \(pkg.name)")
+                Button {
+                    confirmAndRemove()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove \(pkg.name)")
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
@@ -204,13 +222,22 @@ struct PackageRow: View {
             switch style {
             case .full:
                 Text(ageText(ref, long: true))
-                if let up = pkg.updatedAt { Text("·"); Text("last updated \(up, format: .relative(presentation: .named))") }
+                if let up = pkg.updatedAt {
+                    Text("·")
+                    Text("last updated \(up, format: .relative(presentation: .named))")
+                }
             case .short:
                 Text(ageText(ref, long: false))
-                if let up = pkg.updatedAt { Text("·"); Text("updated \(DateText.short(Date().timeIntervalSince(up)))") }
+                if let up = pkg.updatedAt {
+                    Text("·")
+                    Text("updated \(DateText.short(Date().timeIntervalSince(up)))")
+                }
             case .icons:
                 Label(ref.map { DateText.short(Date().timeIntervalSince($0)) } ?? "new", systemImage: releaseSymbol)
-                if let up = pkg.updatedAt { Text("·"); Label(DateText.short(Date().timeIntervalSince(up)), systemImage: "clock.arrow.circlepath") }
+                if let up = pkg.updatedAt {
+                    Text("·")
+                    Label(DateText.short(Date().timeIntervalSince(up)), systemImage: "clock.arrow.circlepath")
+                }
             }
             if pkg.isSystem {
                 Text("·")
@@ -229,7 +256,9 @@ struct PackageRow: View {
 
     private func ageText(_ ref: Date?, long: Bool) -> String {
         guard let ref else { return long ? "just found" : "new" }
-        let rel = long ? ref.formatted(.relative(presentation: .named)) : "\(DateText.short(Date().timeIntervalSince(ref))) ago"
+        let rel =
+            long
+            ? ref.formatted(.relative(presentation: .named)) : "\(DateText.short(Date().timeIntervalSince(ref))) ago"
         switch pkg.dateSource {
         case .registry: return "released \(rel)"
         case .homebrew: return "bumped \(rel)"

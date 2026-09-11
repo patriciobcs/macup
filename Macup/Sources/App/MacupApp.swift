@@ -17,7 +17,7 @@ struct MacupApp: App {
                 .environment(store)
                 .environment(settings)
         } label: {
-            MenuBarLabel(count: store.badgeCount, showCount: settings.showMenuBarCount)
+            MenuBarLabel(updates: store.badgeCount, showCount: settings.showMenuBarCount)
         }
         .menuBarExtraStyle(.window)
 
@@ -43,7 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         if Screenshots.runIfRequested() { return }
         let center = NotificationCenter.default
-        center.addObserver(self, selector: #selector(windowChanged), name: NSWindow.didBecomeKeyNotification, object: nil)
+        center.addObserver(
+            self, selector: #selector(windowChanged), name: NSWindow.didBecomeKeyNotification, object: nil)
         center.addObserver(self, selector: #selector(windowChanged), name: NSWindow.willCloseNotification, object: nil)
         if !Preferences.shared.hasOnboarded {
             OnboardingWindow.show(store: UpdateStore.shared, settings: Preferences.shared)
@@ -64,21 +65,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct MenuBarLabel: View {
-    let count: Int
+    let updates: Int
     let showCount: Bool
 
     var body: some View {
         HStack(spacing: 3) {
             // Outline when everything is current, filled when updates are waiting.
             // An NSImage template symbol keeps the exact point size; SwiftUI's Image scales status item glyphs down.
-            Image(nsImage: Self.symbol(count > 0 ? "arrow.up.circle.fill" : "arrow.up.circle"))
-            if count > 0 && showCount {
-                Text("\(count)")
+            Image(nsImage: Self.symbol(updates > 0 ? "arrow.up.circle.fill" : "arrow.up.circle"))
+            if updates > 0 && showCount {
+                Text("\(updates)")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
             }
         }
-        .help(count == 0 ? "Everything is up to date" : "\(count) updates ready")
+        .help(updates == 0 ? "Everything is up to date" : "\(updates) updates ready")
     }
 
     private static func symbol(_ name: String) -> NSImage {

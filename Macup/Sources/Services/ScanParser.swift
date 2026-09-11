@@ -10,12 +10,14 @@ enum ScanParser {
             switch f[0] {
             case "M":
                 guard f.count >= 3, let m = Manager(rawValue: f[1]),
-                      let status = ManagerStatus(rawValue: f[2]) else { continue }
+                    let status = ManagerStatus(rawValue: f[2])
+                else { continue }
                 result.reports.append(ManagerReport(manager: m, status: status, message: f.count > 3 ? f[3] : ""))
             case "P":
                 guard f.count >= 6, let m = Manager(rawValue: f[1]), !f[2].isEmpty else { continue }
-                var pkg = OutdatedPackage(manager: m, name: f[2], installed: f[3], latest: f[4],
-                                          kind: f[5], extra: f.count > 6 ? f[6] : "")
+                var pkg = OutdatedPackage(
+                    manager: m, name: f[2], installed: f[3], latest: f[4],
+                    kind: f[5], extra: f.count > 6 ? f[6] : "")
                 // rustup emits the toolchain build date as extra (YYYY-MM-DD).
                 if m == .rustup, let date = Self.dayFormatter.date(from: pkg.extra) {
                     pkg.releaseDate = date

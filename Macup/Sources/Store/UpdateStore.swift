@@ -1,7 +1,7 @@
+import AppKit
 import Foundation
 import Observation
 import UserNotifications
-import AppKit
 
 /// Single source of truth for the UI: scan results, eligibility, upgrades in flight, and the log.
 @Observable @MainActor
@@ -41,7 +41,8 @@ final class UpdateStore {
         stateURL = dir.appendingPathComponent("state.json")
         history = History(directory: dir)
         if persist, let data = try? Data(contentsOf: stateURL),
-           let saved = try? JSONDecoder.iso.decode(SavedState.self, from: data) {
+            let saved = try? JSONDecoder.iso.decode(SavedState.self, from: data)
+        {
             firstSeen = saved.firstSeen
             packages = saved.packages
             reports = saved.reports
@@ -54,7 +55,10 @@ final class UpdateStore {
 
     /// Packages minus the ones the user chose to ignore and, by default, the ones macOS owns.
     var visible: [OutdatedPackage] {
-        packages.filter { !settings.ignoredPackages.contains($0.id) && !(settings.hideSystemPackages && $0.isSystem) && !Self.isSelfCask($0) }
+        packages.filter {
+            !settings.ignoredPackages.contains($0.id) && !(settings.hideSystemPackages && $0.isSystem)
+                && !Self.isSelfCask($0)
+        }
     }
     var hiddenSystemCount: Int { settings.hideSystemPackages ? packages.filter(\.isSystem).count : 0 }
     var ignored: [OutdatedPackage] { packages.filter { settings.ignoredPackages.contains($0.id) } }
@@ -70,7 +74,10 @@ final class UpdateStore {
     func ignore(_ pkg: OutdatedPackage) {
         settings.ignoredPackages.insert(pkg.id)
         failures.removeValue(forKey: pkg.id)
-        history.add(ActionRecord(kind: .ignore, manager: pkg.manager, package: pkg.name, detail: "\(pkg.installed) → \(pkg.latest)", succeeded: true))
+        history.add(
+            ActionRecord(
+                kind: .ignore, manager: pkg.manager, package: pkg.name, detail: "\(pkg.installed) → \(pkg.latest)",
+                succeeded: true))
     }
 
     func unignore(id: String) {
@@ -84,18 +91,20 @@ final class UpdateStore {
     var badgeCount: Int { eligible.count }
     /// What "Update All" will actually run (system updates are a hand-off to System Settings).
     var updatableCount: Int { eligible.filter { !$0.manager.opensExternally }.count }
-    var securityCount: Int { eligible.filter(\.isSecurity).count }
 
     func isEligible(_ pkg: OutdatedPackage) -> Bool {
-        Eligibility.isEligible(pkg, minAge: settings.minAgeHours * 3600,
-                               securityMinAge: settings.securityMinAgeHours * 3600, firstSeen: firstSeen)
+        Eligibility.isEligible(
+            pkg, minAge: settings.minAgeHours * 3600,
+            securityMinAge: settings.securityMinAgeHours * 3600, firstSeen: firstSeen)
     }
 
     func age(of pkg: OutdatedPackage) -> TimeInterval { Eligibility.age(of: pkg, firstSeen: firstSeen) }
     func referenceDate(of pkg: OutdatedPackage) -> Date? { Eligibility.referenceDate(for: pkg, firstSeen: firstSeen) }
 
     /// True while this specific package is being upgraded (a manager-wide lock also covers rustup toolchains).
-    func isUpgrading(_ pkg: OutdatedPackage) -> Bool { upgrading.contains(pkg.id) || (pkg.manager == .rustup && upgrading.contains(pkg.manager.rawValue)) }
+    func isUpgrading(_ pkg: OutdatedPackage) -> Bool {
+        upgrading.contains(pkg.id) || (pkg.manager == .rustup && upgrading.contains(pkg.manager.rawValue))
+    }
     func isUpgrading(_ manager: Manager) -> Bool { upgrading.contains(manager.rawValue) }
     var isUpgradingAnything: Bool { !upgrading.isEmpty }
 
@@ -155,7 +164,10 @@ final class UpdateStore {
         let set = Set(scanned)
         // A package that is no longer outdated was upgraded after all; forget its failure.
         let stillOutdated = Set(result.packages.map(\.id))
-        failures = failures.filter { !set.contains(Manager(rawValue: $0.key.split(separator: ":")[0].description)!) || stillOutdated.contains($0.key) }
+        failures = failures.filter {
+            !set.contains(Manager(rawValue: $0.key.split(separator: ":")[0].description)!)
+                || stillOutdated.contains($0.key)
+        }
         reports = (reports.filter { !set.contains($0.manager) } + result.reports)
             .sorted { Manager.allCases.firstIndex(of: $0.manager)! < Manager.allCases.firstIndex(of: $1.manager)! }
         packages = packages.filter { !set.contains($0.manager) } + result.packages
@@ -175,7 +187,8 @@ final class UpdateStore {
         await runUpgrade(manager: pkg.manager, packages: [pkg])
         upgrading.remove(pkg.id)
         if Self.isSelfCask(pkg), failures[pkg.id] == nil {
-            history.add(ActionRecord(kind: .upgrade, manager: .brew, package: "MacUp", detail: "relaunching", succeeded: true))
+            history.add(
+                ActionRecord(kind: .upgrade, manager: .brew, package: "MacUp", detail: "relaunching", succeeded: true))
             AppUpdater.relaunch()
             return
         }
@@ -222,7 +235,9 @@ final class UpdateStore {
         let output = OutputBuffer()
         var failure: String?
         do {
-            let status = try await ScriptRunner.upgrade(manager: manager, arguments: args, brewGreedy: settings.brewGreedy) { [weak self] chunk in
+            let status = try await ScriptRunner.upgrade(
+                manager: manager, arguments: args, brewGreedy: settings.brewGreedy
+            ) { [weak self] chunk in
                 output.append(chunk)
                 Task { @MainActor in self?.appendLog(chunk) }
             }
@@ -238,8 +253,10 @@ final class UpdateStore {
         }
         for item in items {
             if let failure { failures[item.id] = failure } else { failures.removeValue(forKey: item.id) }
-            history.add(ActionRecord(kind: .upgrade, manager: manager, package: item.name,
-                                     detail: failure ?? "\(item.installed) → \(item.latest)", succeeded: failure == nil))
+            history.add(
+                ActionRecord(
+                    kind: .upgrade, manager: manager, package: item.name,
+                    detail: failure ?? "\(item.installed) → \(item.latest)", succeeded: failure == nil))
         }
     }
 
@@ -256,15 +273,21 @@ final class UpdateStore {
                 output.append(chunk)
                 Task { @MainActor in self?.appendLog(chunk) }
             }
-            if status == 0 { appendLog("✓ removed\n") }
-            else { appendLog("✗ exited with status \(status)\n"); failure = Self.errorSummary(output.text, status: status) }
+            if status == 0 {
+                appendLog("✓ removed\n")
+            } else {
+                appendLog("✗ exited with status \(status)\n")
+                failure = Self.errorSummary(output.text, status: status)
+            }
         } catch {
             appendLog("✗ \(error.localizedDescription)\n")
             failure = error.localizedDescription
         }
         if let failure { failures[pkg.id] = failure } else { failures.removeValue(forKey: pkg.id) }
-        history.add(ActionRecord(kind: .remove, manager: pkg.manager, package: pkg.name,
-                                 detail: failure ?? pkg.installed, succeeded: failure == nil))
+        history.add(
+            ActionRecord(
+                kind: .remove, manager: pkg.manager, package: pkg.name,
+                detail: failure ?? pkg.installed, succeeded: failure == nil))
         await scan(managers: [pkg.manager])
     }
 
@@ -283,14 +306,20 @@ final class UpdateStore {
                 output.append(chunk)
                 Task { @MainActor in self?.appendLog(chunk) }
             }
-            if status == 0 { appendLog("✓ installed\n") }
-            else { appendLog("✗ exited with status \(status)\n"); failure = Self.errorSummary(output.text, status: status) }
+            if status == 0 {
+                appendLog("✓ installed\n")
+            } else {
+                appendLog("✗ exited with status \(status)\n")
+                failure = Self.errorSummary(output.text, status: status)
+            }
         } catch {
             appendLog("✗ \(error.localizedDescription)\n")
             failure = error.localizedDescription
         }
-        history.add(ActionRecord(kind: .install, manager: manager, package: manager.rawValue,
-                                 detail: failure ?? "via Homebrew", succeeded: failure == nil))
+        history.add(
+            ActionRecord(
+                kind: .install, manager: manager, package: manager.rawValue,
+                detail: failure ?? "via Homebrew", succeeded: failure == nil))
         if failure == nil { await scan(managers: [manager]) }
     }
 
@@ -299,7 +328,8 @@ final class UpdateStore {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Remove \(pkg.name)?"
-        alert.informativeText = "This uninstalls \(pkg.name) \(pkg.installed) using \(pkg.manager.title). You can install it again later."
+        alert.informativeText =
+            "This uninstalls \(pkg.name) \(pkg.installed) using \(pkg.manager.title). You can install it again later."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Remove")
         alert.addButton(withTitle: "Cancel")
@@ -346,7 +376,8 @@ final class UpdateStore {
         let content = UNMutableNotificationContent()
         let security = fresh.filter(\.isSecurity).count
         content.title = security > 0 ? "Security updates available" : "Updates available"
-        content.body = fresh.prefix(4).map { "\($0.name) \($0.latest)" }.joined(separator: ", ")
+        content.body =
+            fresh.prefix(4).map { "\($0.name) \($0.latest)" }.joined(separator: ", ")
             + (fresh.count > 4 ? " and \(fresh.count - 4) more" : "")
         try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
         notified.formUnion(fresh.map(\.versionKey))
@@ -375,16 +406,24 @@ final class UpdateStore {
 
     private func persist() {
         guard persistsState else { return }
-        let s = SavedState(firstSeen: firstSeen, packages: packages, reports: reports, lastScan: lastScan, notified: notified)
+        let s = SavedState(
+            firstSeen: firstSeen, packages: packages, reports: reports, lastScan: lastScan, notified: notified)
         if let data = try? JSONEncoder.iso.encode(s) { try? data.write(to: stateURL, options: .atomic) }
     }
 }
-
 
 /// Thread-safe accumulator for streamed command output.
 final class OutputBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var buffer = ""
-    func append(_ s: String) { lock.lock(); buffer.append(s); lock.unlock() }
-    var text: String { lock.lock(); defer { lock.unlock() }; return buffer }
+    func append(_ s: String) {
+        lock.lock()
+        buffer.append(s)
+        lock.unlock()
+    }
+    var text: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return buffer
+    }
 }

@@ -17,14 +17,17 @@ enum ShellEnvironment {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         var env: [String: String] = [:]
         // Separate flags: zsh and bash accept -ilc, fish does not.
-        if let result = try? await Subprocess.run(executable: shell, arguments: ["-i", "-l", "-c", "echo \(marker); env"],
-                                                  environment: nil, timeout: 8),
-           let range = result.stdout.range(of: marker + "\n") {
+        if let result = try? await Subprocess.run(
+            executable: shell, arguments: ["-i", "-l", "-c", "echo \(marker); env"],
+            environment: nil, timeout: 8),
+            let range = result.stdout.range(of: marker + "\n")
+        {
             for line in result.stdout[range.upperBound...].split(separator: "\n") {
                 guard let eq = line.firstIndex(of: "=") else { continue }
                 let key = String(line[..<eq])
                 guard !key.isEmpty, key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }),
-                      !excluded.contains(key) else { continue }
+                    !excluded.contains(key)
+                else { continue }
                 env[key] = String(line[line.index(after: eq)...])
             }
         }

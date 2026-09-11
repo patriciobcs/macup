@@ -5,10 +5,11 @@ struct SettingsView: View {
     @Environment(UpdateStore.self) private var store
 
     private let ageChoices: [(String, Double)] = [
-        ("Immediately", 0), ("1 hour", 1), ("4 hours", 4), ("12 hours", 12), ("1 day", 24), ("3 days", 72), ("1 week", 168)
+        ("Immediately", 0), ("1 hour", 1), ("4 hours", 4), ("12 hours", 12), ("1 day", 24), ("3 days", 72),
+        ("1 week", 168),
     ]
     private let intervalChoices: [(String, Double)] = [
-        ("Every hour", 1), ("Every 3 hours", 3), ("Every 6 hours", 6), ("Every 12 hours", 12), ("Once a day", 24)
+        ("Every hour", 1), ("Every 3 hours", 3), ("Every 6 hours", 6), ("Every 12 hours", 12), ("Once a day", 24),
     ]
 
     var body: some View {
@@ -24,8 +25,10 @@ struct SettingsView: View {
                 Picker("Check for updates", selection: $settings.checkIntervalHours) {
                     ForEach(intervalChoices, id: \.1) { Text($0.0).tag($0.1) }
                 }
-                Text("Waiting before installing a fresh release gives maintainers time to pull broken or compromised versions. Security fixes for a version you have installed use the shorter delay.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text(
+                    "Waiting before installing a fresh release gives maintainers time to pull broken or compromised versions. Security fixes for a version you have installed use the shorter delay."
+                )
+                .font(.caption).foregroundStyle(.secondary)
             }
             Section("General") {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
@@ -35,13 +38,16 @@ struct SettingsView: View {
                 Toggle(isOn: $settings.hideSystemPackages) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Hide packages that belong to macOS")
-                        Text("System Ruby gems, Xcode's Python packages and other root-owned installs. macOS manages these itself and changing them needs an administrator password."
-                             + (store.hiddenSystemCount > 0 ? " Currently hiding \(store.hiddenSystemCount)." : ""))
-                            .font(.caption).foregroundStyle(.secondary)
+                        Text(
+                            "System Ruby gems, Xcode's Python packages and other root-owned installs. macOS manages these itself and changing them needs an administrator password."
+                                + (store.hiddenSystemCount > 0 ? " Currently hiding \(store.hiddenSystemCount)." : "")
+                        )
+                        .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 LabeledContent("Setup") {
-                    Button("Show Setup…") { OnboardingWindow.show(store: store, settings: settings) }.controlSize(.small)
+                    Button("Show Setup…") { OnboardingWindow.show(store: store, settings: settings) }.controlSize(
+                        .small)
                 }
                 LabeledContent("MacUp \(store.appVersion)") {
                     if AppUpdater.shared.source == .homebrew {
@@ -60,17 +66,25 @@ struct SettingsView: View {
                     if manager == .mas && report?.status == .missing {
                         ManagerSetupRow(manager: manager)
                     } else {
-                    Toggle(isOn: Binding(
-                        get: { !settings.disabledManagers.contains(manager) },
-                        set: { on in if on { settings.disabledManagers.remove(manager) } else { settings.disabledManagers.insert(manager) } }
-                    )) {
-                        HStack {
-                            Label(manager.title, systemImage: manager.symbol)
-                            Spacer()
-                            Text(statusText(report)).font(.caption).foregroundStyle(.secondary)
+                        Toggle(
+                            isOn: Binding(
+                                get: { !settings.disabledManagers.contains(manager) },
+                                set: { on in
+                                    if on {
+                                        settings.disabledManagers.remove(manager)
+                                    } else {
+                                        settings.disabledManagers.insert(manager)
+                                    }
+                                }
+                            )
+                        ) {
+                            HStack {
+                                Label(manager.title, systemImage: manager.symbol)
+                                Spacer()
+                                Text(statusText(report)).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
-                    }
-                    .disabled(report?.status == .missing)
+                        .disabled(report?.status == .missing)
                     }
                 }
             }

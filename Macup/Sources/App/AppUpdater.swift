@@ -30,13 +30,12 @@ final class AppUpdater {
     private init() {
         source = InstallSource.detect()
         if source == .direct, ProcessInfo.processInfo.environment["MACUP_SCREENSHOTS"] == nil {
-            controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+            controller = SPUStandardUpdaterController(
+                startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         } else {
             controller = nil
         }
     }
-
-    var usesSparkle: Bool { controller != nil }
 
     /// Opens Sparkle's own check dialog. No-op for Homebrew installs.
     func checkForUpdates() {

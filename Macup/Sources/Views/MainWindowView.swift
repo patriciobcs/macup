@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 struct MainWindowView: View {
     @Environment(UpdateStore.self) private var store
@@ -66,7 +66,6 @@ struct HistoryView: View {
             }
         }
     }
-
 }
 
 struct HistoryRow: View {
@@ -80,7 +79,8 @@ struct HistoryRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.title).font(.body)
                 if !r.detail.isEmpty {
-                    Text(firstLine(r.detail)).font(.caption).foregroundStyle(r.succeeded ? Color.secondary : Color.red).lineLimit(2)
+                    Text(firstLine(r.detail)).font(.caption).foregroundStyle(r.succeeded ? Color.secondary : Color.red)
+                        .lineLimit(2)
                 }
             }
             Spacer()
@@ -124,7 +124,10 @@ struct LogView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(store.log, forType: .string)
                     copied = true
-                    Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        copied = false
+                    }
                 }
                 .controlSize(.small).disabled(store.log.isEmpty)
                 Button("Clear") { store.clearLog() }.controlSize(.small).disabled(store.log.isEmpty)
@@ -145,7 +148,7 @@ struct LogTextView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
-        let tv = scroll.documentView as! NSTextView
+        guard let tv = scroll.documentView as? NSTextView else { return scroll }
         tv.isEditable = false
         tv.isSelectable = true
         tv.isRichText = false

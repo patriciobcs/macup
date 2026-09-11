@@ -1,0 +1,30 @@
+included:
+  - Macup/Sources
+  - MacupTests
+disabled_rules:
+  - line_length            # swift-format owns line length (120)
+  - trailing_comma
+  - opening_brace          # swift-format owns brace placement
+  - multiple_closures_with_trailing_closure
+  - todo
+opt_in_rules:
+  - closure_spacing
+  - contains_over_filter_is_empty
+  - empty_count
+  - explicit_init
+  - first_where
+  - last_where
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  - vertical_whitespace_closing_braces
+identifier_name:
+  min_length: 1
+  excluded: [id, x, y, m, p, r, s, v, w, cx, cy, up]
+type_body_length: { warning: 400, error: 600 }
+file_length: { warning: 500, error: 800 }
+function_body_length: { warning: 80, error: 120 }
+cyclomatic_complexity: { warning: 20, error: 30 }
+large_tuple: { warning: 3 }
+nesting: { type_level: 2 }

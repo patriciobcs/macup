@@ -35,7 +35,8 @@ struct OfflineRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "wifi.slash").foregroundStyle(.secondary).font(compact ? .caption : .body)
-            Text("No internet connection. Showing the last results.").font(compact ? .caption : .callout).foregroundStyle(.secondary)
+            Text("No internet connection. Showing the last results.").font(compact ? .caption : .callout)
+                .foregroundStyle(.secondary)
         }
         .padding(.horizontal, compact ? 14 : 12).padding(.vertical, compact ? 4 : 6)
     }

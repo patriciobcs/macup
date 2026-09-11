@@ -33,7 +33,8 @@ enum DateText {
         }
         if let up = pkg.updatedAt {
             let how = pkg.manager == .brew ? "from Homebrew's install receipt" : "from the install date on disk"
-            lines.append("Last updated on this Mac \(up.formatted(.relative(presentation: .named))) (\(exact(up))), \(how)")
+            lines.append(
+                "Last updated on this Mac \(up.formatted(.relative(presentation: .named))) (\(exact(up))), \(how)")
         }
         return lines.joined(separator: "\n")
     }

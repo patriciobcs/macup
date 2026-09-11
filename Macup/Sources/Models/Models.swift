@@ -3,7 +3,8 @@ import Foundation
 /// A package manager Macup knows how to scan and upgrade.
 enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
     // Order is display and "Update all" order: rustup runs before cargo so crates needing a newer rustc can build.
-    case macos, brew, port, npm, bun, pnpm, pip, pipx, uv, conda, rustup, cargo, go, gem, composer, nix, mise, tools, mas
+    case macos, brew, port, npm, bun, pnpm, pip, pipx, uv, conda, rustup, cargo, go, gem, composer, nix, mise, tools,
+        mas
 
     var id: String { rawValue }
 

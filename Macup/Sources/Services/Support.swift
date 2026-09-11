@@ -1,5 +1,5 @@
-import Foundation
 import AppKit
+import Foundation
 
 /// Where users can report problems, and the details worth attaching.
 enum Support {
@@ -43,9 +43,11 @@ enum Support {
 }
 
 extension ManagerReport {
-    private static let offlineMarkers = ["offline", "could not resolve", "network is unreachable", "no route to host",
-                                         "temporary failure in name resolution", "nodename nor servname", "timed out",
-                                         "connection refused", "could not connect", "failed to connect"]
+    private static let offlineMarkers = [
+        "offline", "could not resolve", "network is unreachable", "no route to host",
+        "temporary failure in name resolution", "nodename nor servname", "timed out",
+        "connection refused", "could not connect", "failed to connect",
+    ]
 
     /// The failure looks like a missing internet connection rather than a bug.
     var isOffline: Bool {
@@ -56,8 +58,9 @@ extension ManagerReport {
     var friendlyMessage: String {
         switch status {
         case .error:
-            return isOffline ? "\(manager.title) needs an internet connection to check for updates."
-                             : "\(manager.title) could not check for updates."
+            return isOffline
+                ? "\(manager.title) needs an internet connection to check for updates."
+                : "\(manager.title) could not check for updates."
         case .skipped: return message
         case .ok, .missing: return ""
         }

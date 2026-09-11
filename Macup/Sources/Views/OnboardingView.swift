@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// First-run setup. Also reachable from Settings. Shows what MacUp discovered, offers optional tools,
 /// and the two or three preferences worth deciding up front. Everything already works without it.
@@ -22,7 +22,10 @@ struct OnboardingView: View {
             Form {
                 Section {
                     if store.reports.isEmpty {
-                        HStack { ProgressView().controlSize(.small); Text("Looking for package managers…").foregroundStyle(.secondary) }
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text("Looking for package managers…").foregroundStyle(.secondary)
+                        }
                     }
                     ForEach(Manager.allCases) { manager in
                         ManagerSetupRow(manager: manager)
@@ -30,7 +33,8 @@ struct OnboardingView: View {
                 } header: {
                     Text("Package managers on this Mac")
                 } footer: {
-                    Text("MacUp found these automatically. Nothing to configure.").font(.caption).foregroundStyle(.secondary)
+                    Text("MacUp found these automatically. Nothing to configure.").font(.caption).foregroundStyle(
+                        .secondary)
                 }
                 Section("Preferences") {
                     Toggle("Launch at login", isOn: $settings.launchAtLogin)
@@ -65,14 +69,18 @@ struct ManagerSetupRow: View {
             Spacer()
             switch report?.status {
             case .ok:
-                Label(report?.needsAdmin == true ? "Found · needs password to change" : "Found", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green).labelStyle(.titleAndIcon).font(.callout)
+                Label(
+                    report?.needsAdmin == true ? "Found · needs password to change" : "Found",
+                    systemImage: "checkmark.circle.fill"
+                )
+                .foregroundStyle(.green).labelStyle(.titleAndIcon).font(.callout)
             case .missing where manager == .mas:
                 masInstall
             case .missing:
                 Text("Not installed").foregroundStyle(.secondary).font(.callout)
             case .error, .skipped:
-                Label(report?.message ?? "Error", systemImage: "exclamationmark.triangle").foregroundStyle(.orange).font(.callout).lineLimit(1)
+                Label(report?.message ?? "Error", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    .font(.callout).lineLimit(1)
             case nil:
                 EmptyView()
             }
@@ -81,7 +89,10 @@ struct ManagerSetupRow: View {
 
     @ViewBuilder private var masInstall: some View {
         if store.isInstalling(.mas) {
-            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Installing…").foregroundStyle(.secondary).font(.callout) }
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Installing…").foregroundStyle(.secondary).font(.callout)
+            }
         } else if store.reports.contains(where: { $0.manager == .brew && $0.status != .missing }) {
             HStack(spacing: 8) {
                 Text("Needs the mas tool").foregroundStyle(.secondary).font(.callout)
@@ -103,7 +114,11 @@ enum OnboardingWindow {
     private static var window: NSWindow?
 
     static func show(store: UpdateStore, settings: Preferences) {
-        if let window { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
+        if let window {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
         let view = OnboardingView { close() }.environment(store).environment(settings)
         let w = NSWindow(contentViewController: NSHostingController(rootView: view))
         w.title = "Welcome to MacUp"

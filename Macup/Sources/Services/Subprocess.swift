@@ -40,13 +40,19 @@ enum Subprocess {
         let collector = OutputCollector()
         outPipe.fileHandleForReading.readabilityHandler = { h in
             let d = h.availableData
-            if d.isEmpty { h.readabilityHandler = nil; return }
+            if d.isEmpty {
+                h.readabilityHandler = nil
+                return
+            }
             collector.append(d, toStdout: true)
             if let onOutput, let s = String(data: d, encoding: .utf8) { onOutput(s) }
         }
         errPipe.fileHandleForReading.readabilityHandler = { h in
             let d = h.availableData
-            if d.isEmpty { h.readabilityHandler = nil; return }
+            if d.isEmpty {
+                h.readabilityHandler = nil
+                return
+            }
             collector.append(d, toStdout: false)
             if let onOutput, let s = String(data: d, encoding: .utf8) { onOutput(s) }
         }
@@ -74,7 +80,8 @@ enum Subprocess {
         errPipe.fileHandleForReading.readabilityHandler = nil
         collector.append(outPipe.fileHandleForReading.readDataToEndOfFile(), toStdout: true)
         collector.append(errPipe.fileHandleForReading.readDataToEndOfFile(), toStdout: false)
-        return SubprocessResult(status: status, stdout: collector.text(stdout: true), stderr: collector.text(stdout: false))
+        return SubprocessResult(
+            status: status, stdout: collector.text(stdout: true), stderr: collector.text(stdout: false))
     }
 }
 
@@ -82,12 +89,14 @@ private final class OutputCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var out = Data(), err = Data()
     func append(_ d: Data, toStdout: Bool) {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         if toStdout { out.append(d) } else { err.append(d) }
     }
     func text(stdout: Bool) -> String {
-        lock.lock(); defer { lock.unlock() }
-        return String(decoding: stdout ? out : err, as: UTF8.self)
+        lock.lock()
+        defer { lock.unlock() }
+        return String(data: stdout ? out : err, encoding: .utf8) ?? ""
     }
 }
 
@@ -95,7 +104,8 @@ private final class FinishedFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var done = false
     func claim() -> Bool {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         if done { return false }
         done = true
         return true

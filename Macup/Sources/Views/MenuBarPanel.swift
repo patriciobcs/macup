@@ -38,7 +38,9 @@ struct MenuBarPanel: View {
             Spacer()
             HStack(spacing: 10) {
                 if store.updatableCount > 0 {
-                    Button { Task { await store.upgradeAllEligible() } } label: {
+                    Button {
+                        Task { await store.upgradeAllEligible() }
+                    } label: {
                         Image(systemName: "arrow.up.circle.fill").font(.title3)
                     }
                     .buttonStyle(.borderless).disabled(store.isUpgradingAnything)
@@ -47,7 +49,9 @@ struct MenuBarPanel: View {
                 if store.isScanning {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button { Task { await store.scan() } } label: {
+                    Button {
+                        Task { await store.scan() }
+                    } label: {
                         Image(systemName: "arrow.clockwise").font(.body.weight(.medium))
                     }
                     .buttonStyle(.borderless).help("Check now")
@@ -74,16 +78,22 @@ struct MenuBarPanel: View {
     private func appUpdateRow(_ cask: OutdatedPackage) -> some View {
         VStack(spacing: 0) {
             PanelDivider()
-            Button { Task { await store.upgrade(cask) } } label: {
+            Button {
+                Task { await store.upgrade(cask) }
+            } label: {
                 HStack(spacing: 10) {
                     IconCircle(symbol: "shippingbox.fill", tint: .accentColor)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("MacUp \(cask.latest) is available").font(.body)
-                        Text("You have \(cask.installed). Updates with Homebrew and relaunches.").font(.caption).foregroundStyle(.secondary)
+                        Text("You have \(cask.installed). Updates with Homebrew and relaunches.").font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if store.isUpgrading(cask) { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "arrow.up.circle").font(.title3).foregroundStyle(.secondary) }
+                    if store.isUpgrading(cask) {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.up.circle").font(.title3).foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.horizontal, 9).padding(.vertical, 3)
             }
@@ -105,7 +115,9 @@ struct MenuBarPanel: View {
             }
             if !waiting.isEmpty {
                 PanelDivider()
-                Button { withAnimation(.easeInOut(duration: 0.15)) { showWaiting.toggle() } } label: {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { showWaiting.toggle() }
+                } label: {
                     HStack {
                         Text("\(waiting.count) waiting for minimum age").foregroundStyle(.secondary)
                         Spacer()
@@ -153,7 +165,8 @@ struct MenuBarPanel: View {
                 IconCircle(symbol: "checkmark", tint: .green)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Everything is up to date").font(.body)
-                    Text("\(store.discoveredManagers.count) package managers checked").font(.caption).foregroundStyle(.secondary)
+                    Text("\(store.discoveredManagers.count) package managers checked").font(.caption).foregroundStyle(
+                        .secondary)
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 8)
@@ -183,15 +196,23 @@ struct MenuBarPanel: View {
             Button {
                 NSApp.activate(ignoringOtherApps: true)
                 openSettings()
-            } label: { Text("Settings") }
+            } label: {
+                Text("Settings")
+            }
             .buttonStyle(MenuRowStyle())
             Button {
                 openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
-            } label: { Text("Open MacUp") }
+            } label: {
+                Text("Open MacUp")
+            }
             .buttonStyle(MenuRowStyle())
             PanelDivider()
-            Button { NSApp.terminate(nil) } label: { Text("Quit") }.buttonStyle(MenuRowStyle())
+            Button {
+                NSApp.terminate(nil)
+            } label: {
+                Text("Quit")
+            }.buttonStyle(MenuRowStyle())
         }
     }
 }
@@ -207,8 +228,9 @@ struct PanelRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            IconCircle(symbol: pkg.isSecurity ? "exclamationmark.shield.fill" : pkg.manager.symbol,
-                       tint: pkg.isSecurity ? .red : (dimmed ? .gray : .accentColor))
+            IconCircle(
+                symbol: pkg.isSecurity ? "exclamationmark.shield.fill" : pkg.manager.symbol,
+                tint: pkg.isSecurity ? .red : (dimmed ? .gray : .accentColor))
             VStack(alignment: .leading, spacing: 1) {
                 Text(pkg.name).font(.body).lineLimit(1)
                 Text("\(pkg.installed) → \(pkg.latest) · \(ageText)\(updatedText)\(pkg.isSystem ? " · macOS" : "")")
@@ -229,10 +251,16 @@ struct PanelRow: View {
             }
             if let failure = store.failure(for: pkg) {
                 Button("Retry Update") { Task { await store.upgrade(pkg) } }
-                Button("Copy Error") { Support.copy(Support.details(title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure)) }
+                Button("Copy Error") {
+                    Support.copy(
+                        Support.details(title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure))
+                }
                 Button("Report on GitHub…") {
-                    NSWorkspace.shared.open(Support.issueURL(title: "\(pkg.manager.title): update of \(pkg.name) failed",
-                                                             body: Support.details(title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure)))
+                    NSWorkspace.shared.open(
+                        Support.issueURL(
+                            title: "\(pkg.manager.title): update of \(pkg.name) failed",
+                            body: Support.details(
+                                title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure)))
                 }
             }
         }
@@ -249,14 +277,20 @@ struct PanelRow: View {
             } label: {
                 Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red).font(.title3)
             }
-            .buttonStyle(.borderless).help("Update failed:\n\(failure)\n\nClick to see the output. Right-click to retry.")
+            .buttonStyle(.borderless).help(
+                "Update failed:\n\(failure)\n\nClick to see the output. Right-click to retry.")
         } else {
-            Button { Task { await store.upgrade(pkg) } } label: {
-                Image(systemName: pkg.manager.opensExternally ? "arrow.up.forward.app" : "arrow.up.circle").font(.title3)
+            Button {
+                Task { await store.upgrade(pkg) }
+            } label: {
+                Image(systemName: pkg.manager.opensExternally ? "arrow.up.forward.app" : "arrow.up.circle").font(
+                    .title3)
             }
             .buttonStyle(.borderless)
-            .help(pkg.manager.opensExternally ? "Open Software Update in System Settings"
-                  : dimmed ? "Update now, before the minimum age has passed" : "Update \(pkg.name)")
+            .help(
+                pkg.manager.opensExternally
+                    ? "Open Software Update in System Settings"
+                    : dimmed ? "Update now, before the minimum age has passed" : "Update \(pkg.name)")
         }
     }
 
@@ -303,8 +337,10 @@ private struct MenuRowHighlight: ViewModifier {
             .font(.body)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(hovered || pressed ? Color.primary.opacity(pressed ? 0.16 : 0.09) : .clear))
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(hovered || pressed ? Color.primary.opacity(pressed ? 0.16 : 0.09) : .clear)
+            )
             .contentShape(Rectangle())
             .onHover { hovered = $0 }
             .padding(.horizontal, 4)

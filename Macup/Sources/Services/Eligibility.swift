@@ -12,8 +12,10 @@ enum Eligibility {
         return max(0, now.timeIntervalSince(ref))
     }
 
-    static func isEligible(_ pkg: OutdatedPackage, minAge: TimeInterval, securityMinAge: TimeInterval,
-                           firstSeen: [String: Date], now: Date = Date()) -> Bool {
+    static func isEligible(
+        _ pkg: OutdatedPackage, minAge: TimeInterval, securityMinAge: TimeInterval,
+        firstSeen: [String: Date], now: Date = Date()
+    ) -> Bool {
         let threshold = pkg.isSecurity ? securityMinAge : minAge
         return age(of: pkg, firstSeen: firstSeen, now: now) >= threshold
     }

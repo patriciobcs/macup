@@ -23,7 +23,9 @@ actor Registry {
         cacheURL = dir.appendingPathComponent("registry-cache.json")
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = 20
-        cfg.httpAdditionalHeaders = ["User-Agent": "MacUp/1.0 (+https://github.com/patriciobcs/macup)", "Accept": "application/json"]
+        cfg.httpAdditionalHeaders = [
+            "User-Agent": "MacUp/1.0 (+https://github.com/patriciobcs/macup)", "Accept": "application/json",
+        ]
         session = URLSession(configuration: cfg)
     }
 
@@ -67,13 +69,16 @@ actor Registry {
         if pkg.installed != "?", !Version.isNewer(pkg.latest, than: pkg.installed) { return nil }
         if pkg.releaseDate == nil {
             if let cached = cache["date:\(pkg.versionKey)"], let src = cached.source {
-                pkg.releaseDate = cached.date; pkg.dateSource = src
+                pkg.releaseDate = cached.date
+                pkg.dateSource = src
             } else if let (date, source) = await releaseDate(for: pkg) {
-                pkg.releaseDate = date; pkg.dateSource = source
+                pkg.releaseDate = date
+                pkg.dateSource = source
                 cache["date:\(pkg.versionKey)"] = Entry(date: date, source: source)
             } else {
                 // Remember the miss for a day so we do not hammer APIs for packages without dates.
-                cache["date:\(pkg.versionKey)"] = Entry(date: nil, source: .firstSeen, expires: Date().addingTimeInterval(86_400))
+                cache["date:\(pkg.versionKey)"] = Entry(
+                    date: nil, source: .firstSeen, expires: Date().addingTimeInterval(86_400))
             }
         }
         return pkg
@@ -93,7 +98,9 @@ actor Registry {
                 latest = (json["info"] as? [String: Any])?["version"] as? String
             }
         case .go:
-            if let module = pkg.goModule, let json = await getJSON("https://proxy.golang.org/\(Self.goEscape(module))/@latest") {
+            if let module = pkg.goModule,
+                let json = await getJSON("https://proxy.golang.org/\(Self.goEscape(module))/@latest")
+            {
                 latest = json["Version"] as? String
             }
         case .npm, .bun, .pnpm:
@@ -110,44 +117,53 @@ actor Registry {
         switch pkg.manager {
         case .npm, .bun, .pnpm:
             guard let json = await npmDocument(pkg.name),
-                  let time = json["time"] as? [String: Any],
-                  let s = time[pkg.latest] as? String, let d = Self.parseISO(s) else { return nil }
+                let time = json["time"] as? [String: Any],
+                let s = time[pkg.latest] as? String, let d = Self.parseISO(s)
+            else { return nil }
             return (d, .registry)
         case .pip, .uv, .pipx:
             guard let json = await getJSON("https://pypi.org/pypi/\(pkg.name)/\(pkg.latest)/json"),
-                  let urls = json["urls"] as? [[String: Any]],
-                  let s = urls.compactMap({ $0["upload_time_iso_8601"] as? String }).sorted().first,
-                  let d = Self.parseISO(s) else { return nil }
+                let urls = json["urls"] as? [[String: Any]],
+                let s = urls.compactMap({ $0["upload_time_iso_8601"] as? String }).min(),
+                let d = Self.parseISO(s)
+            else { return nil }
             return (d, .registry)
         case .cargo:
             guard let json = await getJSON("https://crates.io/api/v1/crates/\(pkg.name)/\(pkg.latest)"),
-                  let v = json["version"] as? [String: Any],
-                  let s = v["created_at"] as? String, let d = Self.parseISO(s) else { return nil }
+                let v = json["version"] as? [String: Any],
+                let s = v["created_at"] as? String, let d = Self.parseISO(s)
+            else { return nil }
             return (d, .registry)
         case .gem:
             guard let arr = await getJSONArray("https://rubygems.org/api/v1/versions/\(pkg.name).json"),
-                  let v = arr.first(where: { ($0["number"] as? String) == pkg.latest }),
-                  let s = v["created_at"] as? String, let d = Self.parseISO(s) else { return nil }
+                let v = arr.first(where: { ($0["number"] as? String) == pkg.latest }),
+                let s = v["created_at"] as? String, let d = Self.parseISO(s)
+            else { return nil }
             return (d, .registry)
         case .brew:
             return await homebrewBumpDate(pkg)
         case .go:
             guard let module = pkg.goModule,
-                  let json = await getJSON("https://proxy.golang.org/\(Self.goEscape(module))/@v/\(pkg.latest).info"),
-                  let s = json["Time"] as? String, let d = Self.parseISO(s) else { return nil }
+                let json = await getJSON("https://proxy.golang.org/\(Self.goEscape(module))/@v/\(pkg.latest).info"),
+                let s = json["Time"] as? String, let d = Self.parseISO(s)
+            else { return nil }
             return (d, .registry)
         case .composer:
             guard let json = await getJSON("https://repo.packagist.org/p2/\(pkg.name).json"),
-                  let versions = (json["packages"] as? [String: Any])?[pkg.name] as? [[String: Any]],
-                  let v = versions.first(where: { ($0["version"] as? String) == pkg.latest || ($0["version"] as? String) == "v\(pkg.latest)" }),
-                  let s = v["time"] as? String, let d = Self.parseISO(s) else { return nil }
+                let versions = (json["packages"] as? [String: Any])?[pkg.name] as? [[String: Any]],
+                let v = versions.first(where: {
+                    ($0["version"] as? String) == pkg.latest || ($0["version"] as? String) == "v\(pkg.latest)"
+                }),
+                let s = v["time"] as? String, let d = Self.parseISO(s)
+            else { return nil }
             return (d, .registry)
         case .tools:
             // extra is "owner/repo:tag"; the release's publish date is the release date.
             let parts = pkg.extra.split(separator: ":", maxSplits: 1).map(String.init)
             guard parts.count == 2, !parts[1].isEmpty,
-                  let json = await getJSON("https://api.github.com/repos/\(parts[0])/releases/tags/\(parts[1])"),
-                  let s = json["published_at"] as? String, let d = Self.parseISO(s) else { return nil }
+                let json = await getJSON("https://api.github.com/repos/\(parts[0])/releases/tags/\(parts[1])"),
+                let s = json["published_at"] as? String, let d = Self.parseISO(s)
+            else { return nil }
             return (d, .registry)
         case .rustup, .mas, .macos, .port, .conda, .nix, .mise:
             return nil
@@ -157,7 +173,7 @@ actor Registry {
     /// Date of the last commit touching the formula/cask file in Homebrew's GitHub repos.
     private func homebrewBumpDate(_ pkg: OutdatedPackage) async -> (Date, DateSource)? {
         let token = pkg.name.split(separator: "/").last.map(String.init) ?? pkg.name
-        guard pkg.name == token || pkg.name.hasPrefix("homebrew/") else { return nil } // third-party tap
+        guard pkg.name == token || pkg.name.hasPrefix("homebrew/") else { return nil }  // third-party tap
         guard let first = token.first else { return nil }
         let repo: String, path: String
         if pkg.baseKind == "cask" {
@@ -171,9 +187,10 @@ actor Registry {
         var comps = URLComponents(string: "https://api.github.com/repos/Homebrew/\(repo)/commits")!
         comps.queryItems = [.init(name: "path", value: path), .init(name: "per_page", value: "1")]
         guard let url = comps.url, let arr = await getJSONArray(url.absoluteString),
-              let commit = arr.first?["commit"] as? [String: Any],
-              let committer = commit["committer"] as? [String: Any],
-              let s = committer["date"] as? String, let d = Self.parseISO(s) else { return nil }
+            let commit = arr.first?["commit"] as? [String: Any],
+            let committer = commit["committer"] as? [String: Any],
+            let s = committer["date"] as? String, let d = Self.parseISO(s)
+        else { return nil }
         return (d, .homebrew)
     }
 
@@ -192,11 +209,15 @@ actor Registry {
         }
         guard !toQuery.isEmpty else { return }
         let queries: [[String: Any]] = toQuery.map { q in
-            ["package": ["name": packages[q.index].name, "ecosystem": q.ecosystem], "version": packages[q.index].installed]
+            [
+                "package": ["name": packages[q.index].name, "ecosystem": q.ecosystem],
+                "version": packages[q.index].installed,
+            ]
         }
         guard let body = try? JSONSerialization.data(withJSONObject: ["queries": queries]),
-              let json = await postJSON("https://api.osv.dev/v1/querybatch", body: body),
-              let results = json["results"] as? [[String: Any]], results.count == toQuery.count else { return }
+            let json = await postJSON("https://api.osv.dev/v1/querybatch", body: body),
+            let results = json["results"] as? [[String: Any]], results.count == toQuery.count
+        else { return }
         for (q, r) in zip(toQuery, results) {
             let ids = ((r["vulns"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }
             packages[q.index].advisories = ids
@@ -225,7 +246,8 @@ actor Registry {
     private func get(_ url: String) async -> Data? {
         guard let u = URL(string: url) else { return nil }
         guard let (data, resp) = try? await session.data(from: u),
-              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+            let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+        else { return nil }
         return data
     }
 
@@ -236,7 +258,8 @@ actor Registry {
         req.httpBody = body
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         guard let (data, resp) = try? await session.data(for: req),
-              let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+            let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+        else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
@@ -244,7 +267,8 @@ actor Registry {
         guard !loaded else { return }
         loaded = true
         if let data = try? Data(contentsOf: cacheURL),
-           let decoded = try? JSONDecoder.iso.decode([String: Entry].self, from: data) {
+            let decoded = try? JSONDecoder.iso.decode([String: Entry].self, from: data)
+        {
             let now = Date()
             cache = decoded.filter { ($0.value.expires ?? .distantFuture) > now }
         }
@@ -260,16 +284,26 @@ actor Registry {
     }
 
     nonisolated static func parseISO(_ s: String) -> Date? {
-        let f1 = ISO8601DateFormatter(); f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let f1 = ISO8601DateFormatter()
+        f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let d = f1.date(from: s) { return d }
-        let f2 = ISO8601DateFormatter(); f2.formatOptions = [.withInternetDateTime]
+        let f2 = ISO8601DateFormatter()
+        f2.formatOptions = [.withInternetDateTime]
         return f2.date(from: s)
     }
 }
 
 extension JSONDecoder {
-    static let iso: JSONDecoder = { let d = JSONDecoder(); d.dateDecodingStrategy = .iso8601; return d }()
+    static let iso: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }()
 }
 extension JSONEncoder {
-    static let iso: JSONEncoder = { let e = JSONEncoder(); e.dateEncodingStrategy = .iso8601; return e }()
+    static let iso: JSONEncoder = {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }()
 }

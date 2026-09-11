@@ -33,7 +33,7 @@ jobs:
         env:
           # Served from https://<owner>.github.io/<repo>/ unless a custom domain is configured.
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
-        run: npm ci && npm run build
+        run: npm ci && npm run check && npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/out

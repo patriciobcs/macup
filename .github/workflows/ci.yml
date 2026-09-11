@@ -12,8 +12,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Select newest Xcode
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -n1)/Contents/Developer" && xcodebuild -version
-      - name: Install xcodegen
-        run: brew install xcodegen
+      - name: Install tools
+        run: brew install xcodegen swiftlint
+      - name: Format check
+        run: swift format lint --strict --recursive Macup/Sources MacupTests
+      - name: SwiftLint
+        run: swiftlint --strict --quiet
       - name: Generate project
         run: xcodegen generate
       - name: Build and test

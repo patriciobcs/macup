@@ -12,7 +12,7 @@ enum Version {
             case let (.number(m), .number(n)):
                 if m != n { return m < n ? .orderedAscending : .orderedDescending }
             case (.number, .text):
-                return .orderedDescending   // 1.0.0 > 1.0.0-beta
+                return .orderedDescending  // 1.0.0 > 1.0.0-beta
             case (.text, .number):
                 return .orderedAscending
             case let (.text(s), .text(t)):
@@ -35,10 +35,14 @@ enum Version {
         func flush() {
             guard !cur.isEmpty else { return }
             out.append(curIsDigit == true ? .number(Int(cur) ?? 0) : .text(cur.lowercased()))
-            cur = ""; curIsDigit = nil
+            cur = ""
+            curIsDigit = nil
         }
         for ch in s.drop(while: { $0 == "v" || $0 == "V" }) {
-            if ".-_+~,".contains(ch) { flush(); continue }
+            if ".-_+~,".contains(ch) {
+                flush()
+                continue
+            }
             let d = ch.isNumber
             if curIsDigit != nil && curIsDigit != d { flush() }
             curIsDigit = d

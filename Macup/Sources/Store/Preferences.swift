@@ -17,7 +17,9 @@ final class Preferences {
     /// Include Homebrew casks that update themselves (brew outdated --greedy).
     var brewGreedy: Bool { didSet { d.set(brewGreedy, forKey: "brewGreedy") } }
     var notificationsEnabled: Bool { didSet { d.set(notificationsEnabled, forKey: "notificationsEnabled") } }
-    var disabledManagers: Set<Manager> { didSet { d.set(disabledManagers.map(\.rawValue).sorted(), forKey: "disabledManagers") } }
+    var disabledManagers: Set<Manager> {
+        didSet { d.set(disabledManagers.map(\.rawValue).sorted(), forKey: "disabledManagers") }
+    }
     /// Package ids ("manager:name") the user never wants to see, e.g. stub crates that cannot be upgraded.
     var ignoredPackages: Set<String> { didSet { d.set(ignoredPackages.sorted(), forKey: "ignoredPackages") } }
     /// Hide packages that belong to macOS itself (system Ruby gems, Xcode Python). Default: on.
@@ -29,8 +31,9 @@ final class Preferences {
     var launchAtLogin: Bool {
         get { SMAppService.mainApp.status == .enabled }
         set {
-            do { if newValue { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
-            catch { NSLog("Launch at login failed: \(error)") }
+            do {
+                if newValue { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            } catch { NSLog("Launch at login failed: \(error)") }
         }
     }
 

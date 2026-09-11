@@ -10,8 +10,14 @@ export const metadata: Metadata = {
   openGraph: { title: site.name, description: site.tagline, type: "website" },
   icons: {
     icon: [
-      { url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon-light.png`, media: "(prefers-color-scheme: light)" },
-      { url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon-dark.png`, media: "(prefers-color-scheme: dark)" },
+      {
+        url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon-light.png`,
+        media: "(prefers-color-scheme: light)",
+      },
+      {
+        url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon-dark.png`,
+        media: "(prefers-color-scheme: dark)",
+      },
     ],
   },
 };
