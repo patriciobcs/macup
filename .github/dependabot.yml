@@ -8,6 +8,10 @@ updates:
     schedule: { interval: weekly }
     groups:
       site: { patterns: ["*"] }
+    ignore:
+      # eslint-config-next does not support ESLint 10 yet; take the major when Next does.
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
