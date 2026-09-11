@@ -6,6 +6,8 @@
 
 <p align="center">Keep your command-line tools up to date, from the menu bar.</p>
 
+<p align="center"><a href="https://github.com/patriciobcs/macup/actions/workflows/ci.yml"><img src="https://github.com/patriciobcs/macup/actions/workflows/ci.yml/badge.svg" alt="CI"></a></p>
+
 MacUp is a macOS menu bar app for developers. It finds the package managers on your Mac, shows what is outdated with the release date and any known vulnerability, and updates it in one click using each manager's own commands. It needs no configuration to be useful.
 
 Free and open source under the MIT license. Requires macOS 14 or later, Apple Silicon or Intel.
@@ -51,7 +53,7 @@ MacUp keeps itself current the way it was installed. A Homebrew install lists it
 
 ## Privacy
 
-MacUp has no accounts and no telemetry. Network requests go to the package registries named above, to OSV.dev for advisories, to GitHub for Homebrew commit dates and release lookups, and, for a downloaded copy, to the Sparkle appcast on this repository's releases. Package managers themselves contact their own registries as they normally would. All state lives in `~/Library/Application Support/Macup`.
+MacUp has no accounts and no telemetry. To do its job it does send some of your data to third parties: for each package that is outdated, its name goes to the relevant registry (npm, PyPI, crates.io, RubyGems, Packagist, the Go module proxy, or GitHub for Homebrew) to look up the release date, and its name and installed version go to OSV.dev to check for advisories. Nothing about packages that are up to date leaves your Mac, and nothing identifies you beyond your IP address. A downloaded copy also fetches the Sparkle appcast from this repository's releases. Package managers themselves contact their own registries as they normally would. All state lives in `~/Library/Application Support/Macup`.
 
 ## Limitations
 
@@ -119,4 +121,4 @@ Issues and pull requests are welcome. Keep the app simple: default Apple compone
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Bundled third-party software is listed in [THIRD_PARTY.md](THIRD_PARTY.md).

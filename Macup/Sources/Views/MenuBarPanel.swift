@@ -44,6 +44,7 @@ struct MenuBarPanel: View {
                         Image(systemName: "arrow.up.circle.fill").font(.title3)
                     }
                     .buttonStyle(.borderless).disabled(store.isUpgradingAnything)
+                    .accessibilityLabel("Update all")
                     .help(store.isUpgradingAnything ? "Updating…" : "Update all \(store.updatableCount)")
                 }
                 if store.isScanning {
@@ -54,7 +55,7 @@ struct MenuBarPanel: View {
                     } label: {
                         Image(systemName: "arrow.clockwise").font(.body.weight(.medium))
                     }
-                    .buttonStyle(.borderless).help("Check now")
+                    .buttonStyle(.borderless).help("Check now").accessibilityLabel("Check now")
                 }
             }
         }
@@ -278,7 +279,9 @@ struct PanelRow: View {
                 Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red).font(.title3)
             }
             .buttonStyle(.borderless).help(
-                "Update failed:\n\(failure)\n\nClick to see the output. Right-click to retry.")
+                "Update failed:\n\(failure)\n\nClick to see the output. Right-click to retry."
+            )
+            .accessibilityLabel("Update failed, show output")
         } else {
             Button {
                 Task { await store.upgrade(pkg) }
@@ -290,7 +293,9 @@ struct PanelRow: View {
             .help(
                 pkg.manager.opensExternally
                     ? "Open Software Update in System Settings"
-                    : dimmed ? "Update now, before the minimum age has passed" : "Update \(pkg.name)")
+                    : dimmed ? "Update now, before the minimum age has passed" : "Update \(pkg.name)"
+            )
+            .accessibilityLabel(pkg.manager.opensExternally ? "Open Software Update" : "Update \(pkg.name)")
         }
     }
 

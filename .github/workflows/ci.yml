@@ -26,6 +26,12 @@ jobs:
           xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= test 2>&1 | tee build.log | grep -E "error:|Test Case .* failed|Executed .* tests|TEST" || true
           grep -q "TEST SUCCEEDED" build.log
+      - name: Render every view from fixtures
+        # Draws the panel, window and Settings offscreen; a crash in any view fails here.
+        run: |
+          app=$(find ~/Library/Developer/Xcode/DerivedData build -name MacUp.app -path '*Debug*' 2>/dev/null | head -n1)
+          MACUP_SCREENSHOTS="$RUNNER_TEMP/shots" "$app/Contents/MacOS/MacUp"
+          test "$(ls "$RUNNER_TEMP/shots"/*.png | wc -l)" -eq 6
       - name: Script syntax
         run: find Macup/Resources/Scripts tests -name '*.sh' -exec zsh -n {} \;
 

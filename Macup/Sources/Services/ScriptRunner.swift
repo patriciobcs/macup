@@ -9,8 +9,8 @@ enum ScriptRunner {
     static func environment(brewGreedy: Bool) async -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         // The login shell's variables (PNPM_HOME, GOPATH, NVM_DIR, …) on top of the GUI environment.
-        for (k, v) in await ShellEnvironment.loginEnvironment() where k != "PATH" { env[k] = v }
-        env["MACUP_USER_PATH"] = await ShellEnvironment.userPATH()
+        for (k, v) in await ShellEnvironment.shared.loginEnvironment() where k != "PATH" { env[k] = v }
+        env["MACUP_USER_PATH"] = await ShellEnvironment.shared.userPATH()
         env["HOME"] = env["HOME"] ?? NSHomeDirectory()
         env["LANG"] = env["LANG"] ?? "en_US.UTF-8"
         env["TERM"] = "dumb"

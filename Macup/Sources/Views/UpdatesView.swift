@@ -29,7 +29,7 @@ struct UpdatesView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .buttonStyle(.borderless).help("Check now")
+                .buttonStyle(.borderless).help("Check now").accessibilityLabel("Check now")
             }
         }
         .padding(.horizontal, 12).frame(height: 44)  // same height as the output pane's header so the dividers line up
@@ -189,6 +189,7 @@ struct PackageRow: View {
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
                 }
                 .buttonStyle(.borderless).help("Update failed:\n\(failure)\n\nClick to show the output.")
+                .accessibilityLabel("Update failed, show output")
                 Button("Retry") { Task { await store.upgrade(pkg) } }.controlSize(.small)
             } else {
                 Button(pkg.manager.opensExternally ? "Open Settings" : "Update") { Task { await store.upgrade(pkg) } }
@@ -202,6 +203,7 @@ struct PackageRow: View {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless).foregroundStyle(.secondary).help("Remove \(pkg.name)")
+                .accessibilityLabel("Remove \(pkg.name)")
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 5)

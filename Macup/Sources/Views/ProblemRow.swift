@@ -19,6 +19,7 @@ struct ProblemRow: View {
                 Image(systemName: "ellipsis.circle")
             }
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .accessibilityLabel("More actions")
             .help("Retry, copy details, or report")
         }
         .help(report.message.isEmpty ? report.friendlyMessage : report.message)
