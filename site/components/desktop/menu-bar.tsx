@@ -32,7 +32,8 @@ export function StatusCluster({ count }: { count: number }) {
             <mask id="macup-arrow-cutout">
               <rect width="24" height="24" fill="white" />
               {/* Proportions of SF's arrow.up.circle.fill: shorter, thicker shaft and a wider 90° head. */}
-              <path d="M12 17.2V7 M8.1 10.9 12 7l3.9 3.9" fill="none" stroke="black" strokeWidth="2.15" strokeLinecap="round" strokeLinejoin="round" />
+              {/* Same arrow shape, scaled to 88% about the centre of the disc. */}
+              <path d="M12 17.2V7 M8.1 10.9 12 7l3.9 3.9" fill="none" stroke="black" strokeWidth="2.15" strokeLinecap="round" strokeLinejoin="round" transform="translate(12 12.1) scale(0.88) translate(-12 -12.1)" />
             </mask>
           </defs>
           <circle cx="12" cy="12" r="10" fill="white" mask="url(#macup-arrow-cutout)" />
