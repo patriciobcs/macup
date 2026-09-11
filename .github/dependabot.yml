@@ -1,8 +1,6 @@
+# Sparkle is pinned in project.yml (no Package.swift), so Dependabot cannot track it; bump it by hand.
 version: 2
 updates:
-  - package-ecosystem: swift
-    directory: /
-    schedule: { interval: weekly }
   - package-ecosystem: npm
     directory: /site
     schedule: { interval: weekly }
