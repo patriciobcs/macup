@@ -13,17 +13,17 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# macOS runners are not used: their minutes bill at ten times the rate. The app build, unit tests, view
+# render and macOS package-manager integration run locally through scripts/check.sh (see README).
 jobs:
   changes:
     name: What changed
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # paths-filter lists a pull request's files through the API, which needs read access to pull requests.
     permissions:
       contents: read
       pull-requests: read
     outputs:
-      app: ${{ steps.filter.outputs.app }}
       scripts: ${{ steps.filter.outputs.scripts }}
     steps:
       - uses: actions/checkout@v7
@@ -31,86 +31,10 @@ jobs:
         id: filter
         with:
           filters: |
-            app:
-              - 'Macup/**'
-              - 'MacupTests/**'
-              - 'project.yml'
-              - '.swift-format'
-              - '.swiftlint.yml'
-              - '.github/workflows/ci.yml'
             scripts:
               - 'Macup/Resources/Scripts/**'
-              - 'tests/**'
+              - 'tests/docker/**'
               - '.github/workflows/ci.yml'
-
-  app:
-    name: Build app and unit tests (macOS)
-    needs: changes
-    if: needs.changes.outputs.app == 'true'
-    # The Icon Composer app icon needs a current Xcode; macos-26 carries the same toolchain as development.
-    runs-on: macos-26
-    timeout-minutes: 25
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: 1
-      HOMEBREW_NO_INSTALL_CLEANUP: 1
-    steps:
-      - uses: actions/checkout@v7
-      - name: Select Xcode
-        # Newest release Xcode on the image, skipping betas.
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | grep -vi beta | sort -V | tail -n1)/Contents/Developer" && xcodebuild -version
-      - name: Install tools
-        run: brew install --quiet xcodegen swiftlint
-      - name: Format check
-        run: swift format lint --strict --recursive Macup/Sources MacupTests
-      - name: SwiftLint
-        run: swiftlint --strict --quiet
-      - name: Generate project
-        run: xcodegen generate
-      - name: Cache Swift packages
-        uses: actions/cache@v6
-        with:
-          path: .spm
-          key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
-      - name: Build and test
-        run: |
-          set -o pipefail
-          xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' \
-            -clonedSourcePackagesDirPath .spm -derivedDataPath build \
-            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= test 2>&1 \
-            | tee build.log | grep -E "error:|Test Case .* failed|Executed .* tests|TEST" || true
-          grep -q "TEST SUCCEEDED" build.log
-      - name: Render every view from fixtures
-        # Draws the panel, window and Settings offscreen; a crash in any view fails here.
-        run: |
-          MACUP_SCREENSHOTS="$RUNNER_TEMP/shots" build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
-          test "$(ls "$RUNNER_TEMP/shots"/*.png | wc -l)" -eq 6
-      - name: Script syntax
-        run: find Macup/Resources/Scripts tests -name '*.sh' -exec zsh -n {} \;
-
-  scripts-macos:
-    name: Package manager integrations (macOS)
-    needs: changes
-    if: needs.changes.outputs.scripts == 'true'
-    runs-on: macos-15
-    timeout-minutes: 45
-    env:
-      HOMEBREW_NO_AUTO_UPDATE: 1
-      HOMEBREW_NO_INSTALL_CLEANUP: 1
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      UV_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v7
-      - name: Install managers and pin old packages
-        run: tests/macos/setup.sh
-      - name: Scan, upgrade, remove, verify
-        run: tests/macos/run-tests.sh
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: macos-upgrade-logs
-          path: /tmp/*-*.log
-          if-no-files-found: ignore
 
   scripts-linux:
     name: Package manager integrations (Linux)
@@ -120,9 +44,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - name: Script syntax
+        run: |
+          sudo apt-get install -y -qq zsh >/dev/null
+          find Macup/Resources/Scripts tests -name '*.sh' -exec zsh -n {} \;
       - name: Build bench image
-        # A plain build takes about four minutes; exporting this multi-gigabyte image to the Actions
-        # cache took far longer, so the job relies on the change filter instead of layer caching.
         run: docker build -t macup-test -f tests/docker/Dockerfile .
       - name: Run
         run: docker run --rm macup-test

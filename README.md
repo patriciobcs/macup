@@ -87,11 +87,11 @@ The app is a SwiftUI shell around three zsh scripts in `Macup/Resources/Scripts`
 
 ### Tests
 
-- **Unit tests** cover the parsers, version comparison and eligibility rules.
-- **Linux bench.** `tests/docker/test.sh` builds an Ubuntu image with 14 managers and packages pinned to old versions, then runs the scan and dry-run upgrades and removals. Needs Docker or a compatible runtime.
-- **macOS integration.** `tests/macos/` runs in GitHub Actions on a disposable runner: it installs every manager, pins old packages, performs real upgrades and removals, and verifies each by rescanning. Do not run `tests/macos/setup.sh` on your own Mac.
+- **Unit tests** cover the parsers, version comparison, eligibility rules, process handling and the store.
+- **Linux bench.** `tests/docker/test.sh` builds an Ubuntu image with 14 managers and packages pinned to old versions, then runs the scan and dry-run upgrades and removals. Needs Docker or a compatible runtime. This is the one job CI runs, and only when scripts change.
+- **macOS integration.** `tests/macos/` installs every manager on a disposable Mac or VM, pins old packages, performs real upgrades and removals, and verifies each by rescanning. It is not run in CI, since macOS runner minutes bill at ten times the rate. Do not run `tests/macos/setup.sh` on a Mac you care about.
 
-All three run in CI on every push and pull request.
+`scripts/check.sh` runs everything else locally: format and lint checks, the unit tests, a render of every view from fixtures, the site checks and script syntax. `scripts/check.sh --bench` adds the Linux bench. The pre-commit hook runs the relevant subset on staged files.
 
 ### Screenshots
 

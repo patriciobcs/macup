@@ -33,15 +33,21 @@ export default function Home() {
   return (
     // One grid for menu bar and desktop: the second column is as wide as the status cluster, so the
     // open dropdown sits exactly under the MacUp item and the window keeps the rest of the width.
-    <div className="wallpaper text-foreground grid min-h-screen grid-cols-[minmax(0,1fr)_auto] grid-rows-[1.75rem_1fr] gap-x-4 px-4 pt-1 lg:gap-x-6 lg:px-6">
+    <div className="wallpaper text-foreground grid min-h-screen grid-cols-[minmax(0,1fr)_auto] grid-rows-[1.75rem_auto_1fr] gap-x-4 px-4 pt-1 lg:gap-x-6 lg:px-6">
       <MenuBarLeft />
       <StatusCluster count={demo.count} />
 
-      {/* On desktop the window floats centered in its area at a typical app size instead of filling it. */}
-      <main className="col-span-2 flex min-w-0 flex-col gap-4 pt-2 pb-8 lg:col-span-1 lg:items-center lg:justify-center lg:pb-16">
+      {/* Like macOS: the dropdown's left edge sits on the status item's left edge at a fixed width. The
+          aside is zero-width so it never widens the column; the panel simply overflows to the right. */}
+      <aside className="col-start-2 row-start-2 hidden w-0 pt-1.5 sm:block">
+        <Panel className="w-[320px]" />
+      </aside>
+
+      {/* Tablets: the window sits under the dropdown. Desktop: beside it, centered at a typical app size. */}
+      <main className="col-span-2 row-start-3 flex min-w-0 flex-col gap-4 pt-2 pb-8 lg:col-span-1 lg:col-start-1 lg:row-span-2 lg:row-start-2 lg:items-center lg:justify-center lg:pb-16">
         {/* Phone: the dropdown is the hero, hanging under the menu bar in a compact form. */}
-        <div className="flex justify-end lg:hidden">
-          <Panel compact className="w-full sm:w-[320px]" />
+        <div className="sm:hidden">
+          <Panel compact className="w-full" />
         </div>
 
         <Window title="MacUp" mobileCard className="w-full lg:w-[1440px] lg:max-w-full">
@@ -117,12 +123,6 @@ export default function Home() {
           ))}
         </nav>
       </main>
-
-      {/* The open dropdown, left-aligned with its status item directly above. */}
-      {/* Positioned absolutely so the panel takes the status cluster's column width without widening it. */}
-      <aside className="relative hidden lg:block">
-        <Panel className="lg:absolute lg:inset-x-0 lg:top-1.5 lg:w-auto" />
-      </aside>
     </div>
   );
 }

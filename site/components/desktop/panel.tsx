@@ -10,7 +10,7 @@ export function Panel({ compact = false, className = "" }: { compact?: boolean; 
   const more = demo.sections.slice(1).reduce((n, s) => n + s.rows.length, 0);
   return (
     <div
-      className={`bg-background/90 w-[350px] min-w-[300px] max-w-full rounded-[12px] py-1.5 text-[13px] leading-[1.25] tracking-normal antialiased shadow-[0_18px_50px_rgba(0,0,0,0.45)] ring-1 ring-white/15 backdrop-blur-2xl ${className}`}
+      className={`bg-background/90 w-[320px] max-w-full rounded-[12px] py-1.5 text-[13px] leading-[1.25] tracking-normal antialiased shadow-[0_18px_50px_rgba(0,0,0,0.45)] ring-1 ring-white/15 backdrop-blur-2xl ${className}`}
     >
       <div className="flex items-center justify-between px-[14px] pt-2 pb-2.5">
         <div>

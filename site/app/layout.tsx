@@ -3,22 +3,22 @@ import "./globals.css";
 import { site } from "@/lib/site";
 import { ThemeProvider } from "@/components/theme-provider";
 
+const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 export const metadata: Metadata = {
   title: `${site.name} – ${site.tagline}`,
   description:
     "MacUp is a free, open source macOS menu bar app that finds the package managers on your Mac, shows what is outdated, and updates it in one click.",
   openGraph: { title: site.name, description: site.tagline, type: "website" },
   icons: {
+    // Theme-specific icons first for browsers that honour `media`; the plain one last for those that
+    // take the final <link>, and a touch icon for iOS bookmarks.
     icon: [
-      {
-        url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon-light.png`,
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/icon-dark.png`,
-        media: "(prefers-color-scheme: dark)",
-      },
+      { url: `${base}/icon-light.png`, media: "(prefers-color-scheme: light)" },
+      { url: `${base}/icon-dark.png`, media: "(prefers-color-scheme: dark)" },
+      { url: `${base}/icon-light.png` },
     ],
+    apple: `${base}/apple-icon.png`,
   },
 };
 
