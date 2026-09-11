@@ -29,6 +29,9 @@ targets:
       - path: Macup/Resources/Scripts
         type: folder
         buildPhase: resources
+      - path: Macup/Resources/AppIcons
+        type: folder
+        buildPhase: resources
       - path: Macup/Resources/MacUp.icon
         type: file
         buildPhase: resources

@@ -42,6 +42,7 @@ struct MacupApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         if Screenshots.runIfRequested() { return }
+        DockIcon.followSystemAppearance()
         let center = NotificationCenter.default
         center.addObserver(
             self, selector: #selector(windowChanged), name: NSWindow.didBecomeKeyNotification, object: nil)
@@ -59,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if NSApp.activationPolicy() != wanted {
                 NSApp.setActivationPolicy(wanted)
                 if open { NSApp.activate(ignoringOtherApps: true) }
+                DockIcon.refresh()
             }
         }
     }

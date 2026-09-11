@@ -58,6 +58,18 @@ Without the token the report is still written locally, just not uploaded. Codeco
 3. Add a case to `Manager` in `Macup/Sources/Models/Models.swift`, and a registry lookup in `Registry.swift` if release dates are available.
 4. Add it to the Linux bench and the macOS test with a package pinned to an old version.
 
+## App icon
+
+`Macup/Resources/MacUp.icon` is the source, and it carries light and dark renditions. macOS only draws the dark one when the user picks a dark "Icon & widget style", so the app swaps its own Dock icon to follow the system appearance (`DockIcon.swift`) using the two exports in `Macup/Resources/AppIcons`. Regenerate them after changing the icon:
+
+```sh
+ictool="/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"
+for r in Default Dark; do
+  "$ictool" Macup/Resources/MacUp.icon --export-image --output-file "Macup/Resources/AppIcons/AppIcon$r.png" \
+    --platform macOS --rendition $r --width 256 --height 256 --scale 2
+done
+```
+
 ## Screenshots
 
 `scripts/screenshots.sh` renders the menu bar panel, the window and Settings from sample data, in light and dark, into `site/public/screenshots`. The app draws its own views offscreen, so the images stay consistent across releases.
