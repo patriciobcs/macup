@@ -1,4 +1,5 @@
-import { ArrowUpCircle, ChevronRight, CircleArrowUp, RotateCw } from "lucide-react";
+import { ChevronRight, RotateCw } from "lucide-react";
+import { ArrowGlyph } from "@/components/desktop/arrow-glyph";
 import { demo } from "@/lib/demo";
 
 
@@ -16,7 +17,7 @@ export function Panel({ compact = false, className = "" }: { compact?: boolean; 
           <div className="mt-px text-[11px] text-muted-foreground">{demo.checked}</div>
         </div>
         <div className="mr-0.5 flex items-center gap-2.5 text-foreground/70">
-          <CircleArrowUp size={20} strokeWidth={1.75} className="fill-foreground/70 text-background" aria-label={`Update all ${demo.count}`} />
+          <ArrowGlyph size={20} filled className="text-foreground/70" />
           <RotateCw size={16} strokeWidth={1.75} aria-hidden />
         </div>
       </div>
@@ -38,7 +39,7 @@ export function Panel({ compact = false, className = "" }: { compact?: boolean; 
                   {r.from} → {r.to} · {r.age} · updated {r.updated}
                 </div>
               </div>
-              <ArrowUpCircle size={20} strokeWidth={1.5} className="shrink-0 text-foreground/70" aria-hidden />
+              <ArrowGlyph size={20} className="shrink-0 text-foreground/70" />
             </div>
           ))}
         </div>

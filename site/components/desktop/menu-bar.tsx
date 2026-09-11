@@ -1,4 +1,5 @@
 import { BatteryCharging, Bell, Bluetooth, Circle, CloudUpload, Search, SlidersHorizontal, Wifi } from "lucide-react";
+import { ArrowGlyph } from "@/components/desktop/arrow-glyph";
 import { ModeToggle } from "@/components/mode-toggle";
 
 const bar = "flex h-7 items-center text-[14px] leading-7 text-white antialiased drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]";
@@ -25,19 +26,8 @@ export function StatusCluster({ count }: { count: number }) {
   return (
     <div className={`${bar} justify-end gap-[16px]`}>
       <span className="flex h-[24px] items-center gap-1.5 rounded-[6px] bg-white/25 px-1.5" aria-label={`MacUp: ${count} updates ready`}>
-        {/* Filled when updates are waiting, like the app's arrow.up.circle.fill: a solid disc with the arrow cut out. */}
-        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
-          <defs>
-            {/* The arrow is a hole in the disc, so whatever is behind the pill shows through. */}
-            <mask id="macup-arrow-cutout">
-              <rect width="24" height="24" fill="white" />
-              {/* Proportions of SF's arrow.up.circle.fill: shorter, thicker shaft and a wider 90° head. */}
-              {/* Same arrow shape, scaled to 88% about the centre of the disc. */}
-              <path d="M12 17.2V7 M8.1 10.9 12 7l3.9 3.9" fill="none" stroke="black" strokeWidth="2.15" strokeLinecap="round" strokeLinejoin="round" transform="translate(12 12.1) scale(0.88) translate(-12 -12.1)" />
-            </mask>
-          </defs>
-          <circle cx="12" cy="12" r="10" fill="white" mask="url(#macup-arrow-cutout)" />
-        </svg>
+        {/* Filled when updates are waiting, like the app's arrow.up.circle.fill. */}
+        <ArrowGlyph size={20} filled className="text-white" />
         <span className="text-[13px] font-semibold tabular-nums">{count}</span>
       </span>
       <span className="hidden items-center gap-[16px] lg:flex" aria-hidden>
