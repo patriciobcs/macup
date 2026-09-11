@@ -30,9 +30,8 @@ jobs:
       - uses: actions/configure-pages@v6
       - name: Build static site
         working-directory: site
-        env:
-          # Served from https://<owner>.github.io/<repo>/ unless a custom domain is configured.
-          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+        # No NEXT_PUBLIC_BASE_PATH: the custom domain in site/public/CNAME serves the site from the
+        # root. Set it to /<repo> again if the site ever moves back to <owner>.github.io/<repo>.
         run: npm ci && npm run check && npm run build
       - uses: actions/upload-pages-artifact@v5
         with:

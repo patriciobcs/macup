@@ -29,11 +29,50 @@ const links = [
   { label: "License", href: site.license },
 ];
 
+/// Structured data: it tells Google this page is a free macOS developer app rather than an article,
+/// which is what earns the richer result. Only facts that are true and checkable go in here.
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: site.name,
+  description: site.description,
+  url: site.url,
+  downloadUrl: site.download,
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "macOS 14 or later",
+  isAccessibleForFree: true,
+  license: "https://opensource.org/licenses/MIT",
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  author: {
+    "@type": "Person",
+    name: "Patricio Calderon",
+    url: site.author.url,
+    sameAs: ["https://github.com/patriciobcs"],
+  },
+  featureList: site.managers,
+  sameAs: [site.github],
+  screenshot: `${site.url}${site.ogImage}`,
+};
+
+/// rel="me" is the convention for "this is the same person elsewhere", which ties the page to its
+/// author for anything that reads identity links.
+function Credit() {
+  return (
+    <a href={site.author.url} rel="me" className="underline-offset-4 hover:underline">
+      by {site.author.handle}
+    </a>
+  );
+}
+
 export default function Home() {
   return (
     // One grid for menu bar and desktop: the second column is as wide as the status cluster, so the
     // open dropdown sits exactly under the MacUp item and the window keeps the rest of the width.
     <div className="wallpaper text-foreground grid min-h-screen grid-cols-[minmax(0,1fr)_auto] grid-rows-[1.75rem_auto_1fr] gap-x-4 px-4 pt-1 lg:gap-x-6 lg:px-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <MenuBarLeft />
       <StatusCluster count={demo.count} />
 
@@ -95,6 +134,7 @@ export default function Home() {
                   </a>
                 ))}
                 <LatestVersion />
+                <Credit />
               </nav>
             </div>
             <dl className="border-foreground/10 grid content-center gap-4 border-t pt-6 sm:grid-cols-2 lg:gap-8 lg:border-0 lg:pt-0">
@@ -123,6 +163,7 @@ export default function Home() {
               {l.label}
             </a>
           ))}
+          <Credit />
         </nav>
       </main>
     </div>

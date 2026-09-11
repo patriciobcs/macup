@@ -6,18 +6,40 @@ import { ThemeProvider } from "@/components/theme-provider";
 const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export const metadata: Metadata = {
-  title: `${site.name} – ${site.tagline}`,
-  description:
-    "MacUp is a free, open source macOS menu bar app that finds the package managers on your Mac, shows what is outdated, and updates it in one click.",
-  openGraph: { title: site.name, description: site.tagline, type: "website" },
+  // metadataBase turns every relative URL below into an absolute one, which Open Graph and the
+  // canonical link both require.
+  metadataBase: new URL(site.url),
+  title: `${site.name} — ${site.headline}`,
+  description: site.description,
+  applicationName: site.name,
+  authors: [{ name: "Patricio Calderon", url: "https://github.com/patriciobcs" }],
+  creator: "Patricio Calderon",
+  alternates: { canonical: "/" },
+  // max-image-preview lets Google show the screenshot full width in a result instead of a thumbnail.
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+  },
+  openGraph: {
+    title: `${site.name} — ${site.headline}`,
+    description: site.tagline,
+    type: "website",
+    url: "/",
+    siteName: site.name,
+    locale: "en_US",
+    images: [{ url: site.ogImage, width: 1492, height: 844, alt: `${site.name} listing outdated packages` }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${site.name} — ${site.headline}`,
+    description: site.tagline,
+    images: [site.ogImage],
+  },
   icons: {
-    // Theme-specific icons first for browsers that honour `media`; the plain one last for those that
-    // take the final <link>, and a touch icon for iOS bookmarks.
-    icon: [
-      { url: `${base}/icon-light.png`, media: "(prefers-color-scheme: light)" },
-      { url: `${base}/icon-dark.png`, media: "(prefers-color-scheme: dark)" },
-      { url: `${base}/icon-light.png` },
-    ],
+    // The app's dark rendition, exported from MacUp.icon: a dark square with a light glyph reads on a
+    // light tab strip and a dark one alike, so it needs no per-theme pair.
+    icon: [{ url: `${base}/icon-dark.png` }],
     apple: `${base}/apple-icon.png`,
   },
 };
