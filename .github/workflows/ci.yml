@@ -18,6 +18,10 @@ jobs:
     name: What changed
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # paths-filter lists a pull request's files through the API, which needs read access to pull requests.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       app: ${{ steps.filter.outputs.app }}
       scripts: ${{ steps.filter.outputs.scripts }}
