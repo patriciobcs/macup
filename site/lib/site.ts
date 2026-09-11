@@ -16,6 +16,8 @@ export const site = {
     "Free macOS menu bar app that finds every package manager on your Mac — Homebrew, npm, pip, Cargo and 15 more — and updates what is outdated in one click.",
   repo: "patriciobcs/macup",
   author: { handle: "@patriciobcs", url: "https://patriciobcs.com" },
+  /// The Homebrew install, offered next to the download so either route is one action.
+  install: "brew install --cask patriciobcs/tap/macup",
   /// Canonical origin. Search engines and Open Graph need absolute URLs, and the CNAME in public/
   /// points GitHub Pages at this domain.
   url: "https://macup.patriciobcs.com",

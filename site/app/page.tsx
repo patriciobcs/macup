@@ -1,6 +1,6 @@
 import { CalendarClock, Download, Hourglass, Radar, Terminal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { LatestVersion } from "@/components/latest-version";
+import { InstallCommand } from "@/components/install-command";
 import { Logo } from "@/components/logo";
 import { MenuBarLeft, StatusCluster } from "@/components/desktop/menu-bar";
 import { Panel } from "@/components/desktop/panel";
@@ -120,6 +120,9 @@ export default function Home() {
                   Free, open source, MIT · macOS 14+
                 </span>
               </div>
+              <div className="mt-3 sm:max-w-[424px]">
+                <InstallCommand />
+              </div>
               <nav
                 className="text-muted-foreground mt-auto hidden gap-4 pt-8 text-sm lg:flex"
                 aria-label="Links"
@@ -133,7 +136,6 @@ export default function Home() {
                     {l.label}
                   </a>
                 ))}
-                <LatestVersion />
                 <Credit />
               </nav>
             </div>
