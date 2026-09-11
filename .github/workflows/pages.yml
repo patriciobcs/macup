@@ -28,7 +28,6 @@ jobs:
           cache-dependency-path: site/package-lock.json
       # GitHub Pages needs a public repo on the free plan; the build still runs privately as a check.
       - uses: actions/configure-pages@v6
-        if: ${{ !github.event.repository.private }}
       - name: Build static site
         working-directory: site
         env:
@@ -41,7 +40,6 @@ jobs:
 
   deploy:
     needs: build
-    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
