@@ -18,8 +18,11 @@ actor Registry {
     /// Set by `get` when the most recent request did not complete or hit a rate limit.
     private var requestFailed = false
 
-    init() {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    /// `directory` and `session` are only passed by tests, which keep the cache and the traffic to themselves.
+    init(directory: URL? = nil, session: URLSession? = nil) {
+        let dir =
+            directory
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Macup", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         cacheURL = dir.appendingPathComponent("registry-cache.json")
@@ -28,7 +31,7 @@ actor Registry {
         cfg.httpAdditionalHeaders = [
             "User-Agent": "MacUp/1.0 (+https://github.com/patriciobcs/macup)", "Accept": "application/json",
         ]
-        session = URLSession(configuration: cfg)
+        self.session = session ?? URLSession(configuration: cfg)
     }
 
     // MARK: Public
