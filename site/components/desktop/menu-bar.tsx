@@ -31,7 +31,8 @@ export function StatusCluster({ count }: { count: number }) {
             {/* The arrow is a hole in the disc, so whatever is behind the pill shows through. */}
             <mask id="macup-arrow-cutout">
               <rect width="24" height="24" fill="white" />
-              <path d="M12 16.5V8 M8 12l4-4 4 4" fill="none" stroke="black" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              {/* Proportions of SF's arrow.up.circle.fill: shorter, thicker shaft and a wider 90° head. */}
+              <path d="M12 16.7V7.7 M7.3 12.4l4.7-4.7 4.7 4.7" fill="none" stroke="black" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" />
             </mask>
           </defs>
           <circle cx="12" cy="12" r="10" fill="white" mask="url(#macup-arrow-cutout)" />
