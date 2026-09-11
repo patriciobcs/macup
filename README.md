@@ -62,6 +62,7 @@ MacUp has no accounts and no telemetry. To do its job it does send some of your 
 - **The release-age wait is a heuristic**, not a guarantee. It reduces exposure to releases that are pulled quickly; it does not detect a compromised release on its own.
 - **Nix** support covers `nix-env`. `nix profile` has no outdated listing.
 - **Self-update of tools** applies only to copies installed by their own installers. Copies from Homebrew or npm are updated by those managers. When a tool's own updater fails, MacUp runs the vendor's documented installer script over HTTPS.
+- **pip on Homebrew's Python** refuses changes under PEP 668; MacUp retries with `--break-system-packages` and shows that in the log.
 - **Update All skips macOS updates** on purpose, since they need a restart. The row opens System Settings instead.
 - **MacUp is not sandboxed** and is distributed outside the Mac App Store, because the App Store sandbox does not allow an app to run Homebrew or npm on your behalf. See [SECURITY.md](SECURITY.md).
 

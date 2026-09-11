@@ -68,3 +68,16 @@ final class ReportMessageTests: XCTestCase {
         XCTAssertEqual(bug.friendlyMessage, "npm could not check for updates.")
     }
 }
+
+final class ScanParserFieldTests: XCTestCase {
+    func testFiveFieldLineIsIgnoredAndSevenFieldLineParses() {
+        let r = ScanParser.parse("P\tnpm\tx\t1\t2\nP\tnpm\ty\t1\t2\tglobal\t")
+        XCTAssertEqual(r.packages.map(\.name), ["y"])
+    }
+
+    func testBrewIdsSeparateFormulaAndCask() {
+        let r = ScanParser.parse("P\tbrew\tdocker\t1\t2\tformula\t\nP\tbrew\tdocker\t1\t2\tcask\t")
+        XCTAssertEqual(Set(r.packages.map(\.id)).count, 2)
+        XCTAssertEqual(r.packages[1].upgradeArgument, "cask:docker")
+    }
+}

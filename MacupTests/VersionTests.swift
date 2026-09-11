@@ -30,3 +30,23 @@ final class SelfUpdateVersionTests: XCTestCase {
         XCTAssertFalse(Version.isNewer("0.9.9", than: "1.0.0"))
     }
 }
+
+final class VersionEdgeCaseTests: XCTestCase {
+    func testPostReleasesAreNewerThanTheBase() {
+        XCTAssertTrue(Version.isNewer("1.0.0.post1", than: "1.0.0"))
+        XCTAssertTrue(Version.isNewer("1.0.post1", than: "1.0"))
+        XCTAssertFalse(Version.isNewer("1.0.0", than: "1.0.0.post1"))
+    }
+
+    func testPreReleasesStayOlderThanTheBase() {
+        XCTAssertTrue(Version.isNewer("2.0.0", than: "2.0.0-rc.1"))
+        XCTAssertTrue(Version.isNewer("2.0.0", than: "2.0.0.dev3"))
+        XCTAssertFalse(Version.isNewer("2.0.0a1", than: "2.0.0"))
+    }
+
+    func testHugeAndOddTokensDoNotCrash() {
+        XCTAssertFalse(Version.isNewer("99999999999999999999", than: "99999999999999999999"))
+        XCTAssertFalse(Version.isNewer("latest", than: "latest"))
+        XCTAssertFalse(Version.isNewer("", than: ""))
+    }
+}

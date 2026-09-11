@@ -23,11 +23,16 @@ xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1 || { echo
 gh auth status >/dev/null 2>&1 || { echo "gh is not authenticated" >&2; exit 1; }
 
 # Sparkle command-line tools (generate_appcast) matching the Sparkle release line the app links against.
-TOOLS="$PWD/build/sparkle-tools"
+# Sparkle's signing tools, pinned to the same version the app links (project.yml) and checksum-verified,
+# because generate_appcast runs with access to the private signing key.
+SPARKLE_VERSION=$(sed -nE 's/^ *exactVersion: "([^"]+)"/\1/p' project.yml | head -n1)
+SPARKLE_SHA256=01e0f0ebf6614061ea816d414de50f937d64ffa6822ad572243031ca3676fe19   # Sparkle-2.9.0.tar.xz
+TOOLS="$PWD/build/sparkle-tools-$SPARKLE_VERSION"
 if [[ ! -x "$TOOLS/bin/generate_appcast" ]]; then
   mkdir -p "$TOOLS"
-  gh release download -R sparkle-project/Sparkle --pattern 'Sparkle-*.tar.xz' -D "$TOOLS" --clobber
-  tar -xJf "$TOOLS"/Sparkle-*.tar.xz -C "$TOOLS"
+  gh release download "$SPARKLE_VERSION" -R sparkle-project/Sparkle --pattern "Sparkle-$SPARKLE_VERSION.tar.xz" -D "$TOOLS" --clobber
+  echo "$SPARKLE_SHA256  $TOOLS/Sparkle-$SPARKLE_VERSION.tar.xz" | shasum -a 256 -c - || { echo "Sparkle tools checksum mismatch" >&2; exit 1; }
+  tar -xJf "$TOOLS/Sparkle-$SPARKLE_VERSION.tar.xz" -C "$TOOLS"
 fi
 
 # Version: MARKETING_VERSION from project.yml unless VERSION=x.y.z is given. The build number must grow

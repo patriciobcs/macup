@@ -111,7 +111,8 @@ struct OutdatedPackage: Identifiable, Equatable, Codable, Hashable {
     /// folder or binary modification time for everything else.
     var updatedAt: Date?
 
-    var id: String { "\(manager.rawValue):\(name)" }
+    /// Homebrew can have a formula and a cask with the same name, so brew ids carry the kind.
+    var id: String { manager == .brew ? "brew:\(baseKind):\(name)" : "\(manager.rawValue):\(name)" }
     var versionKey: String { "\(id)@\(latest)" }
     /// Lives in a location owned by macOS (system Ruby, Xcode's Python, a root-owned npm prefix).
     var isSystem: Bool { kind.hasPrefix("system-") }
@@ -126,6 +127,7 @@ struct OutdatedPackage: Identifiable, Equatable, Codable, Hashable {
         switch manager {
         case .mas: extra
         case .go: extra.split(separator: "|").last.map(String.init) ?? name
+        case .brew: "\(baseKind):\(name)"
         default: name
         }
     }

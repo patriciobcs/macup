@@ -44,17 +44,29 @@ pip_run() {
 
 # Run a command with administrator privileges through the standard macOS password prompt.
 as_admin() {
+  # Only a root-owned, non-writable executable may run with elevated rights: never something a user-level
+  # process could have swapped in (rbenv/asdf shims, ~/.local/bin, a writable /usr/local/bin).
+  local exe=$1
+  if [[ "${MACUP_DRY_RUN:-0}" != 1 ]]; then
+    [[ -x "$exe" ]] || { echo "refusing to elevate: $exe is not an executable path" >&2; return 1; }
+    local owner mode; owner=$(stat -f %u "$exe" 2>/dev/null); mode=$(stat -f %Lp "$exe" 2>/dev/null)
+    if [[ "$owner" != 0 || "${mode: -2}" == *[2367]* ]]; then
+      echo "refusing to elevate: $exe is not owned by root, or is group/world writable" >&2; return 1
+    fi
+  fi
   if [[ "${MACUP_DRY_RUN:-0}" == 1 ]]; then printf '$ (admin)'; printf ' %q' "$@"; printf '\n'; return 0; fi
   printf '$ (admin) %s\n' "$*"
   local cmd; cmd=$(printf '%q ' "$@")
   cmd=${cmd//\\/\\\\}; cmd=${cmd//\"/\\\"}
-  osascript -e "do shell script \"$cmd 2>&1\" with administrator privileges"
+  # A fixed PATH inside the elevated shell, so nothing the user's PATH points at is consulted as root.
+  osascript -e "do shell script \"PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/local/bin $cmd 2>&1\" with administrator privileges"
 }
 
 # gem: elevate only when the gem directory is not writable (system Ruby).
 gem_run() {
   local dir; dir=$(gem environment gemdir 2>/dev/null)
-  if [[ -n "$dir" && ! -w "$dir" ]]; then as_admin "$(command -v gem)" "$@"; else run gem "$@"; fi
+  # An unwritable gem dir means the system Ruby: elevate Apple's /usr/bin/gem, never a shim from PATH.
+  if [[ -n "$dir" && ! -w "$dir" ]]; then as_admin /usr/bin/gem "$@"; else run gem "$@"; fi
 }
 
 case "$manager" in
@@ -64,7 +76,9 @@ case "$manager" in
       # If a cask's app was deleted by hand, brew cannot uninstall the old version; reinstalling fixes that state.
       rc=0; capture=$(mktemp "${TMPDIR:-/tmp}/macup-brew.XXXXXX"); trap 'rm -f "$capture"' EXIT
       for n in "${names[@]}"; do
-        run brew upgrade ${MACUP_BREW_GREEDY:+--greedy} -- "$n" 2>&1 | tee "$capture"; bstatus=$pipestatus[1]
+        # Names may carry their kind ("cask:ghostty", "formula:jq") so a formula and a cask sharing a name stay apart.
+        kindflag=(); case "$n" in cask:*) kindflag=(--cask); n=${n#cask:} ;; formula:*) kindflag=(--formula); n=${n#formula:} ;; esac
+        run brew upgrade ${MACUP_BREW_GREEDY:+--greedy} "${kindflag[@]}" -- "$n" 2>&1 | tee "$capture"; bstatus=$pipestatus[1]
         if (( bstatus != 0 )) && grep -q "is not there" "$capture"; then
           echo "→ app is missing from disk, reinstalling the cask instead"
           run brew reinstall --cask -- "$n" || rc=1
@@ -147,7 +161,7 @@ case "$manager" in
     # names are import paths of the main packages (from `go version -m`).
     rc=0; for n in "${names[@]}"; do run go install "$n@latest" || rc=1; done; exit $rc ;;
   port)
-    if (( ${#names} )); then as_admin "$(command -v port)" -N upgrade "${names[@]}"; else as_admin "$(command -v port)" -N upgrade outdated; fi ;;
+    if (( ${#names} )); then as_admin /opt/local/bin/port -N upgrade "${names[@]}"; else as_admin /opt/local/bin/port -N upgrade outdated; fi ;;
   nix)
     if (( ${#names} )); then run nix-env -u "${names[@]}"; else run nix-env -u; fi ;;
   composer)

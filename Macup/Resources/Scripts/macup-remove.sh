@@ -42,17 +42,29 @@ pip_run() {
 
 # Run a command with administrator privileges through the standard macOS password prompt.
 as_admin() {
+  # Only a root-owned, non-writable executable may run with elevated rights: never something a user-level
+  # process could have swapped in (rbenv/asdf shims, ~/.local/bin, a writable /usr/local/bin).
+  local exe=$1
+  if [[ "${MACUP_DRY_RUN:-0}" != 1 ]]; then
+    [[ -x "$exe" ]] || { echo "refusing to elevate: $exe is not an executable path" >&2; return 1; }
+    local owner mode; owner=$(stat -f %u "$exe" 2>/dev/null); mode=$(stat -f %Lp "$exe" 2>/dev/null)
+    if [[ "$owner" != 0 || "${mode: -2}" == *[2367]* ]]; then
+      echo "refusing to elevate: $exe is not owned by root, or is group/world writable" >&2; return 1
+    fi
+  fi
   if [[ "${MACUP_DRY_RUN:-0}" == 1 ]]; then printf '$ (admin)'; printf ' %q' "$@"; printf '\n'; return 0; fi
   printf '$ (admin) %s\n' "$*"
   local cmd; cmd=$(printf '%q ' "$@")
   cmd=${cmd//\\/\\\\}; cmd=${cmd//\"/\\\"}
-  osascript -e "do shell script \"$cmd 2>&1\" with administrator privileges"
+  # A fixed PATH inside the elevated shell, so nothing the user's PATH points at is consulted as root.
+  osascript -e "do shell script \"PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/local/bin $cmd 2>&1\" with administrator privileges"
 }
 
 # gem: elevate only when the gem directory is not writable (system Ruby).
 gem_run() {
   local dir; dir=$(gem environment gemdir 2>/dev/null)
-  if [[ -n "$dir" && ! -w "$dir" ]]; then as_admin "$(command -v gem)" "$@"; else run gem "$@"; fi
+  # An unwritable gem dir means the system Ruby: elevate Apple's /usr/bin/gem, never a shim from PATH.
+  if [[ -n "$dir" && ! -w "$dir" ]]; then as_admin /usr/bin/gem "$@"; else run gem "$@"; fi
 }
 
 case "$manager" in
@@ -71,7 +83,7 @@ case "$manager" in
             [[ -f "$bin/$name" ]] || bin="$HOME/go/bin"
             [[ -f "$bin/$name" ]] || { echo "$name not found in GOBIN or ~/go/bin" >&2; exit 1; }
             run rm -f "$bin/$name" ;;
-  port)     as_admin "$(command -v port)" -N uninstall "$name" ;;
+  port)     as_admin /opt/local/bin/port -N uninstall "$name" ;;
   nix)      run nix-env -e "$name" ;;
   composer) run composer global remove --no-interaction "$name" ;;
   rustup|mas|macos|tools|mise|conda) echo "Removing is not supported for $manager" >&2; exit 65 ;;

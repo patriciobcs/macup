@@ -28,12 +28,16 @@ final class Preferences {
     /// Show the number of ready updates next to the menu bar icon. Default: on.
     var showMenuBarCount: Bool { didSet { d.set(showMenuBarCount, forKey: "showMenuBarCount") } }
 
+    /// Mirrors SMAppService; a failed registration snaps the toggle back instead of lying.
     var launchAtLogin: Bool {
-        get { SMAppService.mainApp.status == .enabled }
-        set {
+        didSet {
+            guard launchAtLogin != (SMAppService.mainApp.status == .enabled) else { return }
             do {
-                if newValue { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-            } catch { NSLog("Launch at login failed: \(error)") }
+                if launchAtLogin { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            } catch {
+                NSLog("Launch at login failed: \(error)")
+                launchAtLogin = SMAppService.mainApp.status == .enabled
+            }
         }
     }
 
@@ -47,6 +51,7 @@ final class Preferences {
         ignoredPackages = Set(d.stringArray(forKey: "ignoredPackages") ?? [])
         hideSystemPackages = d.object(forKey: "hideSystemPackages") as? Bool ?? true
         hasOnboarded = d.bool(forKey: "hasOnboarded")
+        launchAtLogin = SMAppService.mainApp.status == .enabled
         showMenuBarCount = d.object(forKey: "showMenuBarCount") as? Bool ?? true
     }
 

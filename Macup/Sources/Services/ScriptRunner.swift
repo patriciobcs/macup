@@ -24,50 +24,46 @@ enum ScriptRunner {
         }
         let env = await environment(brewGreedy: brewGreedy)
         let r = try await Subprocess.run(
-            executable: "/bin/zsh",
-            arguments: [url.path] + managers.map(\.rawValue),
-            environment: env, timeout: 300)
+            executable: "/bin/zsh", arguments: [url.path] + managers.map(\.rawValue),
+            environment: env, timeout: 300, label: "The scan")
         return ScanParser.parse(r.stdout)
     }
 
     static func upgrade(
         manager: Manager, arguments: [String], brewGreedy: Bool,
         onOutput: @Sendable @escaping (String) -> Void
-    ) async throws -> Int32 {
+    ) async throws -> SubprocessResult {
         guard let url = scriptURL("macup-upgrade") else {
             throw SubprocessError.launchFailed("macup-upgrade.sh missing from bundle")
         }
         let env = await environment(brewGreedy: brewGreedy)
-        let r = try await Subprocess.run(
-            executable: "/bin/zsh",
-            arguments: [url.path, manager.rawValue] + arguments,
-            environment: env, timeout: 3600, onOutput: onOutput)
-        return r.status
+        return try await Subprocess.run(
+            executable: "/bin/zsh", arguments: [url.path, manager.rawValue] + arguments,
+            environment: env, timeout: 3600, label: "The \(manager.title) update", onOutput: onOutput)
     }
 
     static func remove(
         pkg: OutdatedPackage, brewGreedy: Bool,
         onOutput: @Sendable @escaping (String) -> Void
-    ) async throws -> Int32 {
+    ) async throws -> SubprocessResult {
         guard let url = scriptURL("macup-remove") else {
             throw SubprocessError.launchFailed("macup-remove.sh missing from bundle")
         }
         let env = await environment(brewGreedy: brewGreedy)
-        let r = try await Subprocess.run(
-            executable: "/bin/zsh",
-            arguments: [url.path, pkg.manager.rawValue, pkg.upgradeArgument, pkg.baseKind],
-            environment: env, timeout: 600, onOutput: onOutput)
-        return r.status
+        // Removal takes the package's own name (Go removes the binary, mas needs the App Store id).
+        let name = pkg.manager == .mas ? pkg.extra : pkg.name
+        return try await Subprocess.run(
+            executable: "/bin/zsh", arguments: [url.path, pkg.manager.rawValue, name, pkg.baseKind],
+            environment: env, timeout: 600, label: "Removing \(pkg.name)", onOutput: onOutput)
     }
 
-    static func setup(tool: String, onOutput: @Sendable @escaping (String) -> Void) async throws -> Int32 {
+    static func setup(tool: String, onOutput: @Sendable @escaping (String) -> Void) async throws -> SubprocessResult {
         guard let url = scriptURL("macup-setup") else {
             throw SubprocessError.launchFailed("macup-setup.sh missing from bundle")
         }
         let env = await environment(brewGreedy: false)
-        let r = try await Subprocess.run(
+        return try await Subprocess.run(
             executable: "/bin/zsh", arguments: [url.path, tool],
-            environment: env, timeout: 900, onOutput: onOutput)
-        return r.status
+            environment: env, timeout: 900, label: "Installing \(tool)", onOutput: onOutput)
     }
 }

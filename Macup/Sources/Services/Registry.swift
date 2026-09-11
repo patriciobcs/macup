@@ -15,6 +15,8 @@ actor Registry {
     private let cacheURL: URL
     private let session: URLSession
     private var loaded = false
+    /// Set by `get` when the most recent request did not complete or hit a rate limit.
+    private var requestFailed = false
 
     init() {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -67,16 +69,20 @@ actor Registry {
         }
         // Whatever the source, only a strictly newer version is an update.
         if pkg.installed != "?", !Version.isNewer(pkg.latest, than: pkg.installed) { return nil }
+        requestFailed = false
         if pkg.releaseDate == nil {
-            if let cached = cache["date:\(pkg.versionKey)"], let src = cached.source {
+            if let cached = cache["date:\(pkg.versionKey)"], let src = cached.source,
+                (cached.expires ?? .distantFuture) > Date()
+            {
                 pkg.releaseDate = cached.date
                 pkg.dateSource = src
             } else if let (date, source) = await releaseDate(for: pkg) {
                 pkg.releaseDate = date
                 pkg.dateSource = source
                 cache["date:\(pkg.versionKey)"] = Entry(date: date, source: source)
-            } else {
+            } else if !requestFailed {
                 // Remember the miss for a day so we do not hammer APIs for packages without dates.
+                // A failed or rate-limited request is not a miss: try again next scan.
                 cache["date:\(pkg.versionKey)"] = Entry(
                     date: nil, source: .firstSeen, expires: Date().addingTimeInterval(86_400))
             }
@@ -87,14 +93,15 @@ actor Registry {
     private func latestVersion(for pkg: OutdatedPackage) async -> String? {
         let key = "latest:\(pkg.id)"
         if let e = cache[key], let latest = e.latest, (e.expires ?? .distantPast) > Date() { return latest }
+        requestFailed = false
         var latest: String?
         switch pkg.manager {
         case .cargo:
-            if let json = await getJSON("https://crates.io/api/v1/crates/\(pkg.name)") {
+            if let json = await getJSON("https://crates.io/api/v1/crates/\(Self.seg(pkg.name))") {
                 latest = (json["crate"] as? [String: Any])?["max_stable_version"] as? String
             }
         case .uv, .pip, .pipx:
-            if let json = await getJSON("https://pypi.org/pypi/\(pkg.name)/json") {
+            if let json = await getJSON("https://pypi.org/pypi/\(Self.seg(pkg.name))/json") {
                 latest = (json["info"] as? [String: Any])?["version"] as? String
             }
         case .go:
@@ -109,8 +116,12 @@ actor Registry {
             }
         default: break
         }
-        if let latest { cache[key] = Entry(latest: latest, expires: Date().addingTimeInterval(3600)) }
-        return latest
+        if let latest {
+            cache[key] = Entry(latest: latest, expires: Date().addingTimeInterval(3600))
+            return latest
+        }
+        // Offline or the registry is down: an expired answer beats making the package disappear.
+        return requestFailed ? cache[key]?.latest : nil
     }
 
     private func releaseDate(for pkg: OutdatedPackage) async -> (Date, DateSource)? {
@@ -122,20 +133,22 @@ actor Registry {
             else { return nil }
             return (d, .registry)
         case .pip, .uv, .pipx:
-            guard let json = await getJSON("https://pypi.org/pypi/\(pkg.name)/\(pkg.latest)/json"),
+            guard let json = await getJSON("https://pypi.org/pypi/\(Self.seg(pkg.name))/\(Self.seg(pkg.latest))/json"),
                 let urls = json["urls"] as? [[String: Any]],
                 let s = urls.compactMap({ $0["upload_time_iso_8601"] as? String }).min(),
                 let d = Self.parseISO(s)
             else { return nil }
             return (d, .registry)
         case .cargo:
-            guard let json = await getJSON("https://crates.io/api/v1/crates/\(pkg.name)/\(pkg.latest)"),
+            guard
+                let json = await getJSON(
+                    "https://crates.io/api/v1/crates/\(Self.seg(pkg.name))/\(Self.seg(pkg.latest))"),
                 let v = json["version"] as? [String: Any],
                 let s = v["created_at"] as? String, let d = Self.parseISO(s)
             else { return nil }
             return (d, .registry)
         case .gem:
-            guard let arr = await getJSONArray("https://rubygems.org/api/v1/versions/\(pkg.name).json"),
+            guard let arr = await getJSONArray("https://rubygems.org/api/v1/versions/\(Self.seg(pkg.name)).json"),
                 let v = arr.first(where: { ($0["number"] as? String) == pkg.latest }),
                 let s = v["created_at"] as? String, let d = Self.parseISO(s)
             else { return nil }
@@ -144,12 +157,13 @@ actor Registry {
             return await homebrewBumpDate(pkg)
         case .go:
             guard let module = pkg.goModule,
-                let json = await getJSON("https://proxy.golang.org/\(Self.goEscape(module))/@v/\(pkg.latest).info"),
+                let json = await getJSON(
+                    "https://proxy.golang.org/\(Self.goEscape(module))/@v/\(Self.seg(pkg.latest)).info"),
                 let s = json["Time"] as? String, let d = Self.parseISO(s)
             else { return nil }
             return (d, .registry)
         case .composer:
-            guard let json = await getJSON("https://repo.packagist.org/p2/\(pkg.name).json"),
+            guard let json = await getJSON("https://repo.packagist.org/p2/\(Self.segPath(pkg.name)).json"),
                 let versions = (json["packages"] as? [String: Any])?[pkg.name] as? [[String: Any]],
                 let v = versions.first(where: {
                     ($0["version"] as? String) == pkg.latest || ($0["version"] as? String) == "v\(pkg.latest)"
@@ -161,7 +175,8 @@ actor Registry {
             // extra is "owner/repo:tag"; the release's publish date is the release date.
             let parts = pkg.extra.split(separator: ":", maxSplits: 1).map(String.init)
             guard parts.count == 2, !parts[1].isEmpty,
-                let json = await getJSON("https://api.github.com/repos/\(parts[0])/releases/tags/\(parts[1])"),
+                let json = await getJSON(
+                    "https://api.github.com/repos/\(Self.segPath(parts[0]))/releases/tags/\(Self.seg(parts[1]))"),
                 let s = json["published_at"] as? String, let d = Self.parseISO(s)
             else { return nil }
             return (d, .registry)
@@ -229,8 +244,8 @@ actor Registry {
     // MARK: HTTP + cache plumbing
 
     private func npmDocument(_ name: String) async -> [String: Any]? {
-        let encoded = name.replacingOccurrences(of: "/", with: "%2F")
-        return await getJSON("https://registry.npmjs.org/\(encoded)")
+        // Scoped packages keep their slash encoded, as the registry expects.
+        return await getJSON("https://registry.npmjs.org/\(Self.seg(name))")
     }
 
     private func getJSON(_ url: String) async -> [String: Any]? {
@@ -245,9 +260,12 @@ actor Registry {
 
     private func get(_ url: String) async -> Data? {
         guard let u = URL(string: url) else { return nil }
-        guard let (data, resp) = try? await session.data(from: u),
-            let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode)
-        else { return nil }
+        guard let (data, resp) = try? await session.data(from: u), let http = resp as? HTTPURLResponse else {
+            requestFailed = true
+            return nil
+        }
+        if http.statusCode == 403 || http.statusCode == 429 { requestFailed = true }
+        guard (200..<300).contains(http.statusCode) else { return nil }
         return data
     }
 
@@ -276,6 +294,18 @@ actor Registry {
 
     private func save() {
         if let data = try? JSONEncoder.iso.encode(cache) { try? data.write(to: cacheURL, options: .atomic) }
+    }
+
+    /// One URL path segment, percent-encoded (a "/" inside a name becomes %2F).
+    nonisolated static func seg(_ s: String) -> String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove("/")
+        return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
+    }
+
+    /// A path made of several segments separated by "/", each encoded on its own.
+    nonisolated static func segPath(_ s: String) -> String {
+        s.split(separator: "/", omittingEmptySubsequences: false).map { seg(String($0)) }.joined(separator: "/")
     }
 
     /// Go module proxy escaping: uppercase letters become "!" + lowercase.

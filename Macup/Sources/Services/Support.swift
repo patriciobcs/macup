@@ -25,7 +25,7 @@ enum Support {
         \(environment)
 
         Output:
-        \(raw.isEmpty ? "(none)" : raw)
+        \(raw.isEmpty ? "(none)" : raw.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
         """
     }
 

@@ -104,6 +104,7 @@ struct SettingsView: View {
         .frame(width: 520)
         .onChange(of: settings.disabledManagers) { _, _ in Task { await store.scan() } }
         .onChange(of: settings.brewGreedy) { _, _ in Task { await store.scan(managers: [.brew]) } }
+        .onChange(of: settings.checkIntervalHours) { _, _ in store.restartSchedule() }
     }
 
     private func manager(_ r: ManagerReport) -> Manager { r.manager }

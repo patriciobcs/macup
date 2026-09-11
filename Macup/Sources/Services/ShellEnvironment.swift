@@ -32,7 +32,9 @@ actor ShellEnvironment {
                 env[key] = String(line[line.index(after: eq)...])
             }
         }
-        cached = env
+        // An empty result means the shell hung or printed nothing; try again next time instead of
+        // pinning every later scan to the GUI's minimal environment.
+        if !env.isEmpty { cached = env }
         return env
     }
 

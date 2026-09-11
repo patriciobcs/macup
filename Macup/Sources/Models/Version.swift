@@ -11,10 +11,11 @@ enum Version {
             switch (x, y) {
             case let (.number(m), .number(n)):
                 if m != n { return m < n ? .orderedAscending : .orderedDescending }
-            case (.number, .text):
-                return .orderedDescending  // 1.0.0 > 1.0.0-beta
-            case (.text, .number):
-                return .orderedAscending
+            case (.number(let m), .text(let t)):
+                // 1.0.0 > 1.0.0-beta, but 1.0.0 < 1.0.0.post1
+                return Self.isPostRelease(t) && m == 0 ? .orderedAscending : .orderedDescending
+            case (.text(let t), .number(let n)):
+                return Self.isPostRelease(t) && n == 0 ? .orderedDescending : .orderedAscending
             case let (.text(s), .text(t)):
                 if s != t { return s < t ? .orderedAscending : .orderedDescending }
             }
@@ -27,6 +28,11 @@ enum Version {
     }
 
     private enum Part: Equatable { case number(Int), text(String) }
+
+    /// PEP 440 post-release markers come after the release; everything else textual is a pre-release.
+    private static func isPostRelease(_ t: String) -> Bool {
+        t.hasPrefix("post") || t == "rev" || t == "r" || t == "p"
+    }
 
     private static func parts(_ s: String) -> [Part] {
         var out: [Part] = []

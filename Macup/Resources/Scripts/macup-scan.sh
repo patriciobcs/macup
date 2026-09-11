@@ -27,11 +27,12 @@ export PATH
 if [[ -z "${PNPM_HOME:-}" ]]; then
   for d in "$HOME/Library/pnpm" "$HOME/.local/share/pnpm"; do [[ -d "$d" ]] && { export PNPM_HOME="$d"; break; }; done
 fi
-export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1
+# Homebrew refreshes its API cache on `outdated` at most once a day; without that refresh results go stale.
+export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1
 export npm_config_update_notifier=false
 
-header() { printf 'M\t%s\t%s\t%s\n' "$1" "$2" "${3:-}"; }
-pkg()    { printf 'P\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "${6:-}" "${7:-}"; }
+header() { printf 'M\t%s\t%s\t%s\n' "$1" "$2" "${${3:-}//[$'\t\n']/ }"; }
+pkg()    { printf 'P\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${1//[$'\t\n']/ }" "${2//[$'\t\n']/ }" "${3//[$'\t\n']/ }" "${4//[$'\t\n']/ }" "${5//[$'\t\n']/ }" "${${6:-}//[$'\t\n']/ }" "${${7:-}//[$'\t\n']/ }"; }
 if stat -f %m / >/dev/null 2>&1; then mtime() { [[ -e "$1" ]] && stat -f %m "$1" 2>/dev/null; }
 else mtime() { [[ -e "$1" ]] && stat -c %Y "$1" 2>/dev/null; }; fi
 # First dotted version number in a tool's --version output.
@@ -135,7 +136,7 @@ scan_pnpm() {
     case "$line" in
       *'"current"'*) current=$(printf '%s\n' "$line" | jstr current) ;;
       *'"latest"'*)  latest=$(printf '%s\n' "$line" | jstr latest) ;;
-      *'"'*'": {'*)  name=$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*"([^"]*)"[[:space:]]*:.*/\1/p') ;;
+      *'"'*'":'*'{'*)  name=$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*"([^"]*)"[[:space:]]*:.*/\1/p') ;;
       *'}'*) [[ -n "$name" && -n "$latest" && "$current" != "$latest" ]] && pkg pnpm "$name" "${current:-?}" "$latest" global "" "$(mtime "$root/$name")"
              name="" current="" latest="" ;;
     esac
@@ -160,7 +161,8 @@ scan_pip() {
     sed -nE 's/.*"name": *"([^"]*)".*"version": *"([^"]*)".*"latest_version": *"([^"]*)".*/\1\t\2\t\3/p' | \
   while IFS=$'\t' read -r name cur latest; do
     # dist-info (or older egg-info) folder: name is normalised (dashes/dots → underscores, any case).
-    info=("$site"/(#i)${name//[-._]/[-._]}-$cur.dist-info(N) "$site"/(#i)${name//[-._]/[-._]}-$cur*.egg-info(N))
+    local norm=${name//[-.]/_}
+    info=("$site"/(#i)${norm}-$cur.dist-info(N) "$site"/(#i)${name}-$cur.dist-info(N) "$site"/(#i)${norm}-$cur*.egg-info(N) "$site"/(#i)${name}-$cur*.egg-info(N))
     pkg pip "$name" "$cur" "$latest" "$kind" "" "$(mtime "${info[1]:-}")"
   done
 }
@@ -267,6 +269,7 @@ scan_tools() {
   # GitHub's latest release for each one that is not managed by Homebrew, npm, Nix, mise or MacPorts.
   local brewp=""; have brew && brewp=$(brew --prefix 2>/dev/null)
   local spec name repo prefix bin real cur latest
+  local -a lookups=()   # PIDs of our own lookups: a bare `wait` would also wait on jobs inherited from the runner
   local -a specs=("uv|astral-sh/uv|" "bun|oven-sh/bun|bun-v" "deno|denoland/deno|v" "pnpm|pnpm/pnpm|v" "mise|jdx/mise|v")
   local found=0
   for spec in "${specs[@]}"; do
@@ -275,7 +278,8 @@ scan_tools() {
     bin=$(command -v "$name"); real=$(realpath "$bin" 2>/dev/null || print -r -- "$bin")
     [[ -n "$brewp" && "$real" == "$brewp"/* ]] && continue
     case "$real" in
-      */node_modules/*|*/corepack/*|/nix/store/*|*/.rustup/*|*/mise/*|*/.asdf/*|/opt/local/*|/usr/local/Cellar/*) continue ;;
+      */node_modules/*|*/corepack/*|/nix/store/*|*/.rustup/*|*/.cargo/bin/*|*/mise/*|*/.asdf/*|/opt/local/*|/usr/local/Cellar/*) continue ;;
+      */pipx/venvs/*|*/site-packages/*|*/Python.framework/*|*/.local/share/uv/tools/*|*/.volta/*) continue ;;
     esac
     cur=$(self_version "$name"); [[ -z "$cur" ]] && continue
     found=1
@@ -283,12 +287,13 @@ scan_tools() {
     ( tag=$(curl -sI -m 10 "https://github.com/$repo/releases/latest" | sed -nE 's#^[Ll]ocation: .*/tag/([^[:space:]]+).*#\1#p' | tr -d '\r')
       latest=${tag#$prefix}
       [[ -n "$latest" && "$latest" == "$cur" ]] && exit 0   # already current
-      pkg tools "$name" "$cur" "${latest:-?}" tool "$repo:$tag" "$(mtime "$real")" > "$tmp/tools.$name" ) &
+      pkg tools "$name" "$cur" "${latest:-?}" tool "$repo:$tag" "$(mtime "$real")" > "$tmp/lookup-tools.$name" ) &
+    lookups+=($!)
   done
-  wait
+  (( ${#lookups} )) && wait "${lookups[@]}"
   (( found )) || { header tools missing; return; }
   header tools ok
-  cat "$tmp"/tools.* 2>/dev/null
+  cat "$tmp"/lookup-tools.* 2>/dev/null   # distinct prefix: "$tmp/tools.part" is this scanner's own output
 }
 
 scan_mise() {
@@ -302,7 +307,7 @@ scan_mise() {
     case "$line" in
       *'"current"'*) current=$(printf '%s\n' "$line" | jstr current) ;;
       *'"latest"'*)  latest=$(printf '%s\n' "$line" | jstr latest) ;;
-      *'"'*'": {'*)  [[ -z "$name" ]] && name=$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*"([^"]*)"[[:space:]]*:.*/\1/p') ;;
+      *'"'*'":'*'{'*)  [[ -z "$name" ]] && name=$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*"([^"]*)"[[:space:]]*:.*/\1/p') ;;
       *'}'*)
         if [[ -n "$name" && -n "$latest" && "$current" != "$latest" ]]; then
           where=$(mise where "$name" 2>/dev/null)
@@ -418,12 +423,25 @@ ALL=(macos brew port npm bun pnpm pip pipx uv conda rustup cargo go gem composer
 managers=("$@"); (( $# == 0 )) && managers=("${ALL[@]}")
 
 # Run managers concurrently, each into its own temp file, then emit in stable order.
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/macup.XXXXXX"); trap 'rm -rf "$tmp"' EXIT
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/macup.XXXXXX"); trap 'rm -rf "$tmp"' EXIT TERM INT HUP
+# Each manager gets its own deadline so one slow or hung tool cannot take the whole scan with it.
+deadline=${MACUP_MANAGER_TIMEOUT:-180}
 for m in "${managers[@]}"; do
-  ( "scan_$m" > "$tmp/$m" 2>/dev/null ) &
+  (
+    trap - EXIT TERM INT HUP   # subshells inherit the cleanup trap; only the main shell may remove $tmp
+    ( trap - EXIT TERM INT HUP; "scan_$m" > "$tmp/$m.part" 2>/dev/null ) &
+    worker=$!
+    # The watchdog kills the manager process itself, not only the worker shell, and never holds our stdout.
+    ( trap - EXIT TERM INT HUP; sleep "$deadline"; pkill -TERM -P $worker 2>/dev/null; kill -TERM $worker 2>/dev/null && : > "$tmp/$m.timeout" ) >/dev/null 2>&1 &
+    watchdog=$!
+    wait $worker 2>/dev/null
+    pkill -P $watchdog 2>/dev/null; kill $watchdog 2>/dev/null; wait $watchdog 2>/dev/null
+    mv -f "$tmp/$m.part" "$tmp/$m" 2>/dev/null
+  ) &
 done
 wait
 for m in "${managers[@]}"; do
-  # A scanner that produced nothing (not even its header) crashed.
-  [[ -s "$tmp/$m" ]] && cat "$tmp/$m" || header "$m" error "scanner crashed"
+  if [[ -e "$tmp/$m.timeout" ]]; then header "$m" error "took longer than ${deadline}s and was stopped"
+  elif [[ -s "$tmp/$m" ]]; then cat "$tmp/$m"
+  else header "$m" error "scanner crashed"; fi
 done

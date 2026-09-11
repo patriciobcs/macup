@@ -28,6 +28,10 @@ final class UpdateStore {
     private let stateURL: URL
     let history: History
     private var scheduler: Task<Void, Never>?
+    /// Managers asked for while a scan was running; scanned as soon as it finishes.
+    private var pendingRescan: Set<Manager> = []
+    /// Advances every few minutes so time-based eligibility re-renders without a new scan.
+    private(set) var clock = Date()
     private var notified: Set<String> = []
 
     private let persistsState: Bool
@@ -95,7 +99,7 @@ final class UpdateStore {
     func isEligible(_ pkg: OutdatedPackage) -> Bool {
         Eligibility.isEligible(
             pkg, minAge: settings.minAgeHours * 3600,
-            securityMinAge: settings.securityMinAgeHours * 3600, firstSeen: firstSeen)
+            securityMinAge: settings.securityMinAgeHours * 3600, firstSeen: firstSeen, now: clock)
     }
 
     func age(of pkg: OutdatedPackage) -> TimeInterval { Eligibility.age(of: pkg, firstSeen: firstSeen) }
@@ -123,13 +127,23 @@ final class UpdateStore {
     func start() {
         scheduler?.cancel()
         scheduler = Task { [weak self] in
+            var nextScan = Date()
             while !Task.isCancelled {
-                await self?.scan()
-                let hours = await self?.settings.checkIntervalHours ?? 6
-                try? await Task.sleep(for: .seconds(max(0.25, hours) * 3600))
+                guard let self else { return }
+                if Date() >= nextScan {
+                    await self.scan()
+                    nextScan = Date().addingTimeInterval(max(0.25, self.settings.checkIntervalHours) * 3600)
+                }
+                self.clock = Date()
+                // Wake every five minutes so a package crossing its minimum age shows up without a new scan,
+                // and so a shorter check interval chosen in Settings takes effect soon.
+                try? await Task.sleep(for: .seconds(300))
             }
         }
     }
+
+    /// Called when the check interval changes: the next scan is rescheduled from now.
+    func restartSchedule() { start() }
 
     var appVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?" }
 
@@ -143,24 +157,44 @@ final class UpdateStore {
     private static func isSelfCask(_ p: OutdatedPackage) -> Bool { p.manager == .brew && p.name == "macup" }
 
     func scan(managers: [Manager]? = nil) async {
-        guard !isScanning else { return }
+        let targets = managers ?? settings.enabledManagers
+        if isScanning {
+            // Queue instead of dropping: a rescan after an upgrade must not be lost to a running scan.
+            pendingRescan.formUnion(targets)
+            return
+        }
         isScanning = true
         scanError = nil
-        defer { isScanning = false }
-        let targets = managers ?? settings.enabledManagers
         do {
             var result = try await ScriptRunner.scan(managers: targets, brewGreedy: settings.brewGreedy)
-            result.packages = await registry.enrich(result.packages)
+            result.packages = await enrichVisible(result.packages)
             merge(result, scanned: targets)
             lastScan = Date()
+            clock = Date()
             persist()
             await notifyIfNeeded()
         } catch {
             scanError = error.localizedDescription
         }
+        isScanning = false
+        if !pendingRescan.isEmpty {
+            let again = Array(pendingRescan)
+            pendingRescan.removeAll()
+            await scan(managers: again)
+        }
     }
 
-    private func merge(_ result: ScanResult, scanned: [Manager]) {
+    /// Release dates and advisories are looked up only for packages the user can see; hidden system
+    /// packages and ignored ones skip the network entirely.
+    private func enrichVisible(_ packages: [OutdatedPackage]) async -> [OutdatedPackage] {
+        let hidden = packages.filter {
+            settings.ignoredPackages.contains($0.id) || (settings.hideSystemPackages && $0.isSystem)
+        }
+        let shown = packages.filter { !hidden.contains($0) }
+        return await registry.enrich(shown) + hidden.filter { !$0.needsLatest }
+    }
+
+    func merge(_ result: ScanResult, scanned: [Manager]) {
         let set = Set(scanned)
         // A package that is no longer outdated was upgraded after all; forget its failure.
         let stillOutdated = Set(result.packages.map(\.id))
@@ -171,9 +205,10 @@ final class UpdateStore {
         reports = (reports.filter { !set.contains($0.manager) } + result.reports)
             .sorted { Manager.allCases.firstIndex(of: $0.manager)! < Manager.allCases.firstIndex(of: $1.manager)! }
         packages = packages.filter { !set.contains($0.manager) } + result.packages
-        // Track when each (package, version) pair was first observed; forget pairs that are gone.
+        // Track when each (package, version) pair was first observed. Pairs that vanish are kept for a
+        // week, so a scan run offline (which cannot resolve some latest versions) does not reset the clock.
         let now = Date()
-        var seen: [String: Date] = [:]
+        var seen: [String: Date] = firstSeen.filter { now.timeIntervalSince($0.value) < 7 * 86_400 }
         for p in packages { seen[p.versionKey] = firstSeen[p.versionKey] ?? now }
         firstSeen = seen
         notified = notified.intersection(Set(packages.map(\.versionKey)))
@@ -232,22 +267,20 @@ final class UpdateStore {
         // rustup upgrades the whole toolchain set at once; others take explicit names.
         let args = manager == .rustup ? [] : items.map(\.upgradeArgument)
         appendLog("\n\(Self.logMarker(manager: manager, names: items.map(\.name)))\n")
-        let output = OutputBuffer()
         var failure: String?
-        do {
-            let status = try await ScriptRunner.upgrade(
-                manager: manager, arguments: args, brewGreedy: settings.brewGreedy
-            ) { [weak self] chunk in
-                output.append(chunk)
-                Task { @MainActor in self?.appendLog(chunk) }
-            }
+        switch await runLogged({ emit in
+            try await ScriptRunner.upgrade(
+                manager: manager, arguments: args, brewGreedy: self.settings.brewGreedy, onOutput: emit)
+        }) {
+        case .success(let result):
+            let status = result.status
             if status == 0 {
                 appendLog("✓ done\n")
             } else {
                 appendLog("✗ exited with status \(status)\n")
-                failure = Self.errorSummary(output.text, status: status)
+                failure = Self.errorSummary(result.combined, status: status)
             }
-        } catch {
+        case .failure(let error):
             appendLog("✗ \(error.localizedDescription)\n")
             failure = error.localizedDescription
         }
@@ -266,20 +299,19 @@ final class UpdateStore {
         upgrading.insert(pkg.id)
         defer { upgrading.remove(pkg.id) }
         appendLog("\n\(Self.logMarker(manager: pkg.manager, names: [pkg.name])) remove\n")
-        let output = OutputBuffer()
         var failure: String?
-        do {
-            let status = try await ScriptRunner.remove(pkg: pkg, brewGreedy: settings.brewGreedy) { [weak self] chunk in
-                output.append(chunk)
-                Task { @MainActor in self?.appendLog(chunk) }
-            }
+        switch await runLogged({ emit in
+            try await ScriptRunner.remove(pkg: pkg, brewGreedy: self.settings.brewGreedy, onOutput: emit)
+        }) {
+        case .success(let result):
+            let status = result.status
             if status == 0 {
                 appendLog("✓ removed\n")
             } else {
                 appendLog("✗ exited with status \(status)\n")
-                failure = Self.errorSummary(output.text, status: status)
+                failure = Self.errorSummary(result.combined, status: status)
             }
-        } catch {
+        case .failure(let error):
             appendLog("✗ \(error.localizedDescription)\n")
             failure = error.localizedDescription
         }
@@ -299,20 +331,17 @@ final class UpdateStore {
         installing.insert(manager)
         defer { installing.remove(manager) }
         appendLog("\n── Install \(manager.rawValue) ──\n")
-        let output = OutputBuffer()
         var failure: String?
-        do {
-            let status = try await ScriptRunner.setup(tool: manager.rawValue) { [weak self] chunk in
-                output.append(chunk)
-                Task { @MainActor in self?.appendLog(chunk) }
-            }
+        switch await runLogged({ emit in try await ScriptRunner.setup(tool: manager.rawValue, onOutput: emit) }) {
+        case .success(let result):
+            let status = result.status
             if status == 0 {
                 appendLog("✓ installed\n")
             } else {
                 appendLog("✗ exited with status \(status)\n")
-                failure = Self.errorSummary(output.text, status: status)
+                failure = Self.errorSummary(result.combined, status: status)
             }
-        } catch {
+        case .failure(let error):
             appendLog("✗ \(error.localizedDescription)\n")
             failure = error.localizedDescription
         }
@@ -337,6 +366,21 @@ final class UpdateStore {
     }
 
     func clearLog() { log = "" }
+
+    /// Runs a script while appending its output to the log in arrival order.
+    private func runLogged(
+        _ body: @escaping (@escaping @Sendable (String) -> Void) async throws -> SubprocessResult
+    ) async -> Result<SubprocessResult, Error> {
+        let (stream, continuation) = AsyncStream<String>.makeStream()
+        let consumer = Task { @MainActor [weak self] in
+            for await chunk in stream { self?.appendLog(chunk) }
+        }
+        let outcome: Result<SubprocessResult, Error>
+        do { outcome = .success(try await body { continuation.yield($0) }) } catch { outcome = .failure(error) }
+        continuation.finish()
+        await consumer.value
+        return outcome
+    }
 
     func failure(for pkg: OutdatedPackage) -> String? { failures[pkg.id] }
 
@@ -409,21 +453,5 @@ final class UpdateStore {
         let s = SavedState(
             firstSeen: firstSeen, packages: packages, reports: reports, lastScan: lastScan, notified: notified)
         if let data = try? JSONEncoder.iso.encode(s) { try? data.write(to: stateURL, options: .atomic) }
-    }
-}
-
-/// Thread-safe accumulator for streamed command output.
-final class OutputBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var buffer = ""
-    func append(_ s: String) {
-        lock.lock()
-        buffer.append(s)
-        lock.unlock()
-    }
-    var text: String {
-        lock.lock()
-        defer { lock.unlock() }
-        return buffer
     }
 }
