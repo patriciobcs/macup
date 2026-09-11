@@ -72,7 +72,9 @@ done
 
 ## Screenshots
 
-`scripts/screenshots.sh` renders the menu bar panel, the window and Settings from sample data, in light and dark, into `site/public/screenshots`. The app draws its own views offscreen, so the images stay consistent across releases.
+The only screenshot the project keeps is `site/public/screenshots/readme.png`, the image at the top of the README. It is made by hand; replace it when the interface changes enough to make it wrong.
+
+The app can still draw all of its views offscreen from sample data (`Screenshots.swift`, triggered by `MACUP_SCREENSHOTS=<directory>`). Nothing ships those images: `scripts/check.sh` renders them to a temporary directory and fails if any view cannot be drawn, which is what covers the SwiftUI code.
 
 ## Website
 
