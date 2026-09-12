@@ -34,6 +34,15 @@ final class AppBehaviourTests: XCTestCase {
     /// open, so it has an application menu. The delegate does that in response to window notifications.
     func testAWindowMakesItARegularAppAndClosingItReturnsToTheMenuBar() async throws {
         let original = NSApp.activationPolicy()
+        // On a machine that has never run MacUp the setup window is already open, and the delegate is
+        // right to stay a regular app while it is. Put any such window aside so this test is about the
+        // one it opens itself.
+        let existing = NSApp.windows.filter {
+            $0.isVisible && $0.styleMask.contains(.titled) && !($0 is NSPanel)
+        }
+        existing.forEach { $0.orderOut(nil) }
+        defer { existing.forEach { $0.orderFront(nil) } }
+
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled],
             backing: .buffered, defer: false)
