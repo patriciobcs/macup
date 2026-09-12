@@ -140,14 +140,17 @@ struct PackageRow: View {
             if let failure = store.failure(for: pkg) {
                 Button("Copy Error") {
                     Support.copy(
-                        Support.details(title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure))
+                        Support.details(
+                            title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure,
+                            version: store.version(of: pkg.manager)))
                 }
                 Button("Report on GitHub…") {
                     NSWorkspace.shared.open(
                         Support.issueURL(
                             title: "\(pkg.manager.title): update of \(pkg.name) failed",
                             body: Support.details(
-                                title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure)))
+                                title: "Update of \(pkg.name) failed", manager: pkg.manager, raw: failure,
+                                version: store.version(of: pkg.manager))))
                 }
             }
         }

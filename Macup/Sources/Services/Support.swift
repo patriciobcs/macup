@@ -16,12 +16,13 @@ enum Support {
         return "MacUp \(appVersion) · macOS \(os)"
     }
 
-    /// Plain-text details for the clipboard or an issue body.
-    static func details(title: String, manager: Manager, raw: String) -> String {
+    /// Plain-text details for the clipboard or an issue body. The manager's version is included when
+    /// the scan reported one, so nobody has to ask for it.
+    static func details(title: String, manager: Manager, raw: String, version: String = "") -> String {
         """
         \(title)
 
-        Manager: \(manager.title) (\(manager.rawValue))
+        Manager: \(manager.title) (\(manager.rawValue))\(version.isEmpty ? "" : " \(version)")
         \(environment)
 
         Output:

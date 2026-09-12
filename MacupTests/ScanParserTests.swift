@@ -80,4 +80,17 @@ final class ScanParserFieldTests: XCTestCase {
         XCTAssertEqual(Set(r.packages.map(\.id)).count, 2)
         XCTAssertEqual(r.packages[1].upgradeArgument, "cask:docker")
     }
+
+    func testAManagerLineCarriesItsVersion() {
+        let result = ScanParser.parse("M\tbrew\tok\t\t6.0.22\nM\tgem\tok\tadmin\t3.0.3\nM\tconda\tmissing\t\t")
+        XCTAssertEqual(result.reports.map(\.version), ["6.0.22", "3.0.3", ""])
+        XCTAssertTrue(result.reports[1].needsAdmin, "the admin marker still reads from the message")
+    }
+
+    func testAManagerLineWithoutAVersionStillParses() {
+        // State written by an older version of the app, or a header with nothing after the message.
+        let result = ScanParser.parse("M\tnpm\tok")
+        XCTAssertEqual(result.reports.first?.manager, .npm)
+        XCTAssertEqual(result.reports.first?.version, "")
+    }
 }

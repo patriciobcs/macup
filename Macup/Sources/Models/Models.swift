@@ -81,6 +81,8 @@ struct ManagerReport: Identifiable, Equatable, Codable {
     let manager: Manager
     var status: ManagerStatus
     var message: String
+    /// The manager's own version, when it is installed. Reported so a bug report says which one it is.
+    var version: String = ""
     var id: Manager { manager }
     /// Changing packages needs an administrator password (system Ruby gems in /Library).
     var needsAdmin: Bool { status == .ok && message == "admin" }

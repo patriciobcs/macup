@@ -63,4 +63,11 @@ final class SupportTests: XCTestCase {
         XCTAssertEqual(report(.ok, "anything").friendlyMessage, "")
         XCTAssertEqual(report(.missing, "anything").friendlyMessage, "", "a manager you do not have is not a problem")
     }
+
+    func testDetailsNameTheManagerVersionWhenItIsKnown() {
+        let text = Support.details(title: "t", manager: .bun, raw: "boom", version: "1.0.2")
+        XCTAssertTrue(text.contains("Manager: Bun (bun) 1.0.2"), "a report says which version failed")
+        // Nothing is known for a manager that never reported, and the line must not look broken.
+        XCTAssertTrue(Support.details(title: "t", manager: .bun, raw: "boom").contains("Manager: Bun (bun)\n"))
+    }
 }

@@ -127,6 +127,9 @@ final class UpdateStore {
     func isUpgrading(_ manager: Manager) -> Bool { upgrading.contains(manager.rawValue) }
     var isUpgradingAnything: Bool { !upgrading.isEmpty }
 
+    /// The version the last scan saw for a manager, for bug reports.
+    func version(of manager: Manager) -> String { reports.first { $0.manager == manager }?.version ?? "" }
+
     func needsAdmin(_ manager: Manager) -> Bool { reports.first { $0.manager == manager }?.needsAdmin ?? false }
 
     /// Managers that failed for reasons other than being offline: these deserve a report.

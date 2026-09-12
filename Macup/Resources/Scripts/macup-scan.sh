@@ -31,7 +31,16 @@ fi
 export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1
 export npm_config_update_notifier=false
 
-header() { printf 'M\t%s\t%s\t%s\n' "$1" "$2" "${${3:-}//[$'\t\n']/ }"; }
+# The binary behind a manager, where the names differ. Empty means there is nothing to ask.
+tool_of() { case "$1" in nix) print nix-env ;; tools|macos) print "" ;; *) print "$1" ;; esac }
+# M<tab>manager<tab>status<tab>message<tab>version. The version travels with every manager that is
+# actually installed, so a bug report carries it without anyone having to ask (issue #12). Managers
+# that are missing cost nothing, since there is no binary to run.
+header() {
+  local tool=${4:-$(tool_of "$1")} version=""
+  [[ "$2" != missing && -n "$tool" ]] && version=$(self_version "$tool")
+  printf 'M\t%s\t%s\t%s\t%s\n' "$1" "$2" "${${3:-}//[$'\t\n']/ }" "$version"
+}
 pkg()    { printf 'P\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${1//[$'\t\n']/ }" "${2//[$'\t\n']/ }" "${3//[$'\t\n']/ }" "${4//[$'\t\n']/ }" "${5//[$'\t\n']/ }" "${${6:-}//[$'\t\n']/ }" "${${7:-}//[$'\t\n']/ }"; }
 if stat -f %m / >/dev/null 2>&1; then mtime() { [[ -e "$1" ]] && stat -f %m "$1" 2>/dev/null; }
 else mtime() { [[ -e "$1" ]] && stat -c %Y "$1" 2>/dev/null; }; fi
@@ -41,6 +50,10 @@ have()   { command -v "$1" >/dev/null 2>&1; }
 # The tool's version, for failure messages: a scanner that fails is most often simply too old for the
 # flags the scan relies on, and that is invisible in the error the tool prints (issue #12).
 vtag() { local v; v=$(self_version "$1"); [[ -n "$v" ]] && printf ' (%s %s)' "$1" "$v"; }
+# npm and pnpm exit non-zero both when packages are outdated and when they fall over, so the exit
+# code alone cannot tell the two apart. Printing nothing at all while complaining on stderr can only
+# be the second: reporting that as "nothing outdated" hides a broken tool.
+crashed() { (( $1 != 0 )) && [[ -z "$2" && -s "$3" ]] }
 # Last line of a command's stderr, cleaned up for display in the app.
 errline() {
   # Prefer a line that names the problem; otherwise the last non-empty line. One line, no control chars.
@@ -92,7 +105,8 @@ scan_npm() {
   have npm || { header npm missing; return; }
   local out; local err="$tmp/npm.err"
   out=$(npm outdated -g --json 2>"$err"); local rc=$?
-  # npm exits 1 when outdated packages exist; only treat non-JSON output as error.
+  # npm exits 1 when outdated packages exist; only treat non-JSON output, or a silent failure, as error.
+  crashed $rc "$out" "$err" && { header npm error "npm outdated failed$(vtag npm): $(errline "$err")"; return; }
   [[ -z "$out" ]] && out="{}"
   [[ "$out" != \{* ]] && { header npm error "npm outdated failed$(vtag npm): $(errline "$err")"; return; }
   header npm ok
@@ -140,6 +154,7 @@ scan_pnpm() {
   have pnpm || { header pnpm missing; return; }
   local out; local err="$tmp/pnpm.err"
   out=$(pnpm outdated -g --format json 2>"$err"); local rc=$?
+  crashed $rc "$out" "$err" && { header pnpm error "pnpm outdated failed$(vtag pnpm): $(errline "$err")"; return; }
   [[ -z "$out" ]] && out="{}"
   [[ "$out" != \{* ]] && { header pnpm error "pnpm outdated failed$(vtag pnpm): $(errline "$err")"; return; }
   header pnpm ok
@@ -167,7 +182,7 @@ scan_pip() {
   case "$site" in *conda*/*|*mamba*/*) header pip skipped "pip belongs to the conda environment; see Conda"; return ;; esac
   local out; local err="$tmp/pip.err"
   out=$($py list --outdated --format=json --disable-pip-version-check 2>"$err") || { header pip error "pip list failed$(vtag "$py"): $(errline "$err")"; return; }
-  header pip ok
+  header pip ok "" "$py"
   [[ -n "$site" && -d "$site" && ! -w "$site" ]] && kind=system-package
   # Compact JSON: [{"name": "...", "version": "...", "latest_version": "...", ...}, ...]
   local name cur latest info

@@ -12,7 +12,10 @@ enum ScanParser {
                 guard f.count >= 3, let m = Manager(rawValue: f[1]),
                     let status = ManagerStatus(rawValue: f[2])
                 else { continue }
-                result.reports.append(ManagerReport(manager: m, status: status, message: f.count > 3 ? f[3] : ""))
+                result.reports.append(
+                    ManagerReport(
+                        manager: m, status: status, message: f.count > 3 ? f[3] : "",
+                        version: f.count > 4 ? f[4] : ""))
             case "P":
                 guard f.count >= 6, let m = Manager(rawValue: f[1]), !f[2].isEmpty else { continue }
                 var pkg = OutdatedPackage(

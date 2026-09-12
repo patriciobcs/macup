@@ -27,7 +27,9 @@ struct ProblemRow: View {
     }
 
     private var title: String { "\(report.manager.title): could not check for updates" }
-    private var details: String { Support.details(title: title, manager: report.manager, raw: report.message) }
+    private var details: String {
+        Support.details(title: title, manager: report.manager, raw: report.message, version: report.version)
+    }
 }
 
 /// One line for the whole scan when the network is unavailable; not something to report.
