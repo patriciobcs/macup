@@ -10,29 +10,6 @@ import XCTest
 final class ViewRenderTests: XCTestCase {
     private let settings = Preferences.shared
 
-    /// Hosts the view in a real (offscreen) window and forces a layout and display pass.
-    private func render<V: View>(
-        _ view: V, size: CGSize = CGSize(width: 900, height: 640),
-        file: StaticString = #filePath, line: UInt = #line
-    ) {
-        let hosting = NSHostingView(rootView: view)
-        let window = NSWindow(
-            contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isOpaque = true
-        // A window made in code is released when closed, which over-releases it under ARC.
-        window.isReleasedWhenClosed = false
-        window.contentView = hosting
-        window.orderBack(nil)
-        hosting.layoutSubtreeIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-        defer { window.close() }
-        guard let content = window.contentView,
-            let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds)
-        else { return XCTFail("the view produced nothing to draw", file: file, line: line) }
-        content.cacheDisplay(in: content.bounds, to: rep)
-        XCTAssertGreaterThan(rep.pixelsHigh, 0, "the view drew no pixels", file: file, line: line)
-    }
-
     private func pkg(
         _ name: String, manager: Manager = .npm, kind: String = "global", released: TimeInterval = 30 * 3600,
         security: Bool = false
@@ -70,7 +47,7 @@ final class ViewRenderTests: XCTestCase {
 
     func testMenuBarPanelWithFailuresOfflineAndAWaitingSecurityFix() {
         let store = troubledStore()
-        render(MenuBarPanel().environment(store).environment(settings), size: CGSize(width: 320, height: 700))
+        renderOffscreen(MenuBarPanel().environment(store).environment(settings), size: CGSize(width: 320, height: 700))
     }
 
     func testMenuBarPanelWhenEverythingIsUpToDate() {
@@ -78,34 +55,87 @@ final class ViewRenderTests: XCTestCase {
         store.loadFixture(
             reports: Manager.allCases.map { .init(manager: $0, status: .ok, message: "") },
             packages: [], log: "")
-        render(MenuBarPanel().environment(store).environment(settings), size: CGSize(width: 320, height: 500))
+        renderOffscreen(MenuBarPanel().environment(store).environment(settings), size: CGSize(width: 320, height: 500))
     }
 
     func testMainWindowWithAFailedUpgradeInTheLog() {
-        render(MainWindowView().environment(troubledStore()).environment(settings))
+        renderOffscreen(MainWindowView().environment(troubledStore()).environment(settings))
     }
 
     func testUpdatesListAndRightPaneWithNothingToShow() {
         let store = UpdateStore(persist: false)
         store.loadFixture(reports: [], packages: [], log: "")
-        render(UpdatesView().environment(store).environment(settings), size: CGSize(width: 430, height: 600))
-        render(RightPane().environment(store).environment(settings), size: CGSize(width: 470, height: 600))
+        renderOffscreen(UpdatesView().environment(store).environment(settings), size: CGSize(width: 430, height: 600))
+        renderOffscreen(RightPane().environment(store).environment(settings), size: CGSize(width: 470, height: 600))
     }
 
     func testSettingsWithManagersDiscoveredAndMissing() {
-        render(SettingsView().environment(troubledStore()).environment(settings), size: CGSize(width: 520, height: 700))
+        renderOffscreen(
+            SettingsView().environment(troubledStore()).environment(settings), size: CGSize(width: 520, height: 700))
     }
 
     func testOnboardingIsDrawnOnFirstLaunch() {
-        render(
+        renderOffscreen(
             OnboardingView(close: {}).environment(UpdateStore.fixture()).environment(settings),
             size: CGSize(width: 560, height: 620))
+    }
+
+    /// A store with history, a log, an ignored package and a hidden system one: the states the
+    /// screenshot fixture never reaches.
+    private func busyStore() -> UpdateStore {
+        let store = UpdateStore(persist: false)
+        store.loadFixture(
+            reports: [
+                ManagerReport(manager: .brew, status: .ok, message: ""),
+                ManagerReport(manager: .gem, status: .ok, message: "admin"),
+                ManagerReport(manager: .npm, status: .error, message: "Error: EACCES"),
+            ],
+            packages: [
+                pkg("lodash", released: 40 * 3600, security: true),
+                pkg("jq", manager: .brew, kind: "formula"),
+                pkg("psych", manager: .gem, kind: "system-gem"),
+                pkg("fresh", released: 600),
+                pkg("Sequoia 15.4", manager: .macos),
+            ],
+            log: (1...40).map { "line \($0) of streamed output" }.joined(separator: "\n"))
+        for kind in [ActionRecord.Kind.upgrade, .remove, .ignore, .install] {
+            store.history.add(
+                ActionRecord(
+                    kind: kind, manager: .npm, package: "lodash", detail: "1.0.0 → 2.0.0",
+                    succeeded: kind != .remove))
+        }
+        return store
+    }
+
+    func testTheLogAndHistoryPanesWithContent() {
+        let store = busyStore()
+        renderOffscreen(
+            LogView(tab: .constant(0)).environment(store).environment(settings), size: CGSize(width: 470, height: 560))
+        renderOffscreen(
+            HistoryView(tab: .constant(1)).environment(store).environment(settings),
+            size: CGSize(width: 470, height: 560))
+    }
+
+    func testTheUpdatesListWithEverySortOfRow() {
+        // Security, waiting, system, a hand-off to System Settings, and a failed manager, together.
+        renderOffscreen(
+            UpdatesView().environment(busyStore()).environment(settings), size: CGSize(width: 430, height: 700))
+    }
+
+    func testTheMenuBarPanelWithABusyStore() {
+        renderOffscreen(
+            MenuBarPanel().environment(busyStore()).environment(settings), size: CGSize(width: 320, height: 760))
+    }
+
+    func testTheWholeWindowWithContent() {
+        renderOffscreen(MainWindowView().environment(busyStore()).environment(settings))
     }
 
     func testProblemRowInBothSizes() {
         let store = troubledStore()
         let report = ManagerReport(manager: .brew, status: .error, message: "Error: permission denied")
-        render(ProblemRow(report: report).environment(store), size: CGSize(width: 420, height: 60))
-        render(ProblemRow(report: report, compact: true).environment(store), size: CGSize(width: 320, height: 40))
+        renderOffscreen(ProblemRow(report: report).environment(store), size: CGSize(width: 420, height: 60))
+        renderOffscreen(
+            ProblemRow(report: report, compact: true).environment(store), size: CGSize(width: 320, height: 40))
     }
 }

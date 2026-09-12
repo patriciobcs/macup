@@ -114,3 +114,17 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(decoded, p)
     }
 }
+
+/// Which updater is in charge. A copy installed by Homebrew must never also update itself.
+final class InstallSourceTests: XCTestCase {
+    func testHomebrewOnlyWhenTheCaskAndTheApplicationsCopyBothExist() {
+        let caskPresent = ["/opt/homebrew/Caskroom/macup", "/usr/local/Caskroom/macup"]
+            .contains { FileManager.default.fileExists(atPath: $0) }
+        // Running from somewhere else is a direct install whether or not a cask exists.
+        XCTAssertEqual(InstallSource.detect(bundlePath: "/Users/someone/Downloads/MacUp.app"), .direct)
+        XCTAssertEqual(InstallSource.detect(bundlePath: "/tmp/build/MacUp.app"), .direct)
+        // In /Applications it depends on the Caskroom, which is whatever this machine has.
+        XCTAssertEqual(
+            InstallSource.detect(bundlePath: "/Applications/MacUp.app"), caskPresent ? .homebrew : .direct)
+    }
+}

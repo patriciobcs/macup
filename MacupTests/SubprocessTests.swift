@@ -39,6 +39,15 @@ final class SubprocessTests: XCTestCase {
         } catch { XCTFail("unexpected \(error)") }
     }
 
+    func testLineBufferHoldsBackAPartialLine() {
+        // Scan output arrives in chunks: a report split across two reads must not be parsed twice or lost.
+        let buffer = LineBuffer()
+        XCTAssertEqual(buffer.take("M\tbrew\to"), [], "an unfinished line waits for the rest")
+        XCTAssertEqual(buffer.take("k\t\nM\tnpm"), ["M\tbrew\tok\t"])
+        XCTAssertEqual(buffer.take("\tmissing\t\nM\tpip\tok\t\n"), ["M\tnpm\tmissing\t", "M\tpip\tok\t"])
+        XCTAssertEqual(buffer.take(""), [])
+    }
+
     func testUTF8SplitAcrossChunks() {
         var d = UTF8Chunker()
         let bytes = Array("🍺 ok".utf8)  // beer mug is 4 bytes

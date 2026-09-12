@@ -88,6 +88,22 @@ final class DockIconTests: XCTestCase {
         XCTAssertLessThan(alpha, 1, "the margin is a shadow, not the icon body")
     }
 
+    func testTheIconIsRepaintedWhenTheAppActivates() async throws {
+        // Becoming a regular app rebuilds the Dock tile from the bundle, so the icon is applied again
+        // on activation rather than only once at launch.
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        DockIcon.followSystemAppearance()
+        NSApp.applicationIconImage = DockIcon.icon("AppIconDefault")  // as if the Dock had reset it
+        XCTAssertGreaterThan(backgroundBrightness(NSApp.applicationIconImage), 0.7)
+
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+        try await Task.sleep(for: .milliseconds(200))
+
+        XCTAssertLessThan(
+            backgroundBrightness(NSApp.applicationIconImage), 0.3,
+            "activating puts the appearance-matched icon back")
+    }
+
     func testTheTwoRenditionsAreActuallyDifferentImages() {
         let light = backgroundBrightness(DockIcon.icon("AppIconDefault"))
         let dark = backgroundBrightness(DockIcon.icon("AppIconDark"))

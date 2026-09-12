@@ -164,6 +164,31 @@ final class StoreStateTests: XCTestCase {
         XCTAssertEqual(store.revealCount, 2, "asking twice for the same section must scroll twice")
     }
 
+    // MARK: Reporting while the scan runs
+
+    func testEachManagerShowsUpAsItFinishes() {
+        let store = UpdateStore(persist: false)
+        XCTAssertEqual(store.scanned, [])
+
+        store.noteScanned(ManagerReport(manager: .npm, status: .ok, message: ""))
+        XCTAssertEqual(store.scanned, [.npm], "the setup window counts this one as checked")
+        XCTAssertEqual(store.reports.map(\.manager), [.npm])
+
+        // brew finishes second but sorts first, so the list stays in a stable order while it fills in.
+        store.noteScanned(ManagerReport(manager: .brew, status: .error, message: "boom"))
+        XCTAssertEqual(store.reports.map(\.manager), [.brew, .npm])
+        XCTAssertEqual(store.scanned, [.npm, .brew])
+    }
+
+    func testAManagerReportingTwiceReplacesItsRow() {
+        let store = UpdateStore(persist: false)
+        store.noteScanned(ManagerReport(manager: .npm, status: .ok, message: ""))
+        store.noteScanned(ManagerReport(manager: .npm, status: .missing, message: ""))
+        XCTAssertEqual(store.reports.count, 1, "the row is replaced, not duplicated")
+        XCTAssertEqual(store.reports.first?.status, .missing)
+        XCTAssertEqual(store.scanned, [.npm])
+    }
+
     // MARK: Merging scans
 
     func testAManagerThatWasNotScannedKeepsItsPackagesAndReport() {
@@ -186,5 +211,57 @@ final class StoreStateTests: XCTestCase {
         XCTAssertEqual(store.log, "some output")
         store.clearLog()
         XCTAssertEqual(store.log, "")
+    }
+}
+
+/// What the store keeps on disk, so a relaunch does not forget how long an update has been waiting.
+@MainActor
+final class StorePersistenceTests: XCTestCase {
+    private var directory = URL(fileURLWithPath: "/tmp")
+
+    override func setUpWithError() throws {
+        directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("macup-store-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private func pkg(_ name: String) -> OutdatedPackage {
+        OutdatedPackage(manager: .npm, name: name, installed: "1.0.0", latest: "2.0.0", kind: "global", extra: "")
+    }
+
+    func testScanResultsComeBackAfterARelaunch() {
+        let package = pkg("lodash")
+        let store = UpdateStore(persist: true, directory: directory)
+        store.merge(
+            ScanResult(reports: [ManagerReport(manager: .npm, status: .ok, message: "")], packages: [package]),
+            scanned: [.npm])
+        store.persist()
+
+        let relaunched = UpdateStore(persist: true, directory: directory)
+        XCTAssertEqual(relaunched.packages.map(\.name), ["lodash"])
+        XCTAssertEqual(relaunched.reports.map(\.manager), [.npm])
+        XCTAssertNotNil(
+            relaunched.firstSeen[package.versionKey],
+            "the clock on how long this version has been out must survive a relaunch")
+    }
+
+    func testAFixtureStoreNeverWritesToDisk() {
+        let store = UpdateStore(persist: false, directory: directory)
+        store.loadFixture(reports: [], packages: [pkg("vite")], log: "")
+        store.persist()
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: directory.appendingPathComponent("state.json").path),
+            "previews and screenshots must not touch real state")
+    }
+
+    func testACorruptStateFileStartsEmptyRatherThanCrashing() throws {
+        try Data("not json".utf8).write(to: directory.appendingPathComponent("state.json"))
+        let store = UpdateStore(persist: true, directory: directory)
+        XCTAssertEqual(store.packages, [])
+        XCTAssertEqual(store.reports, [])
     }
 }

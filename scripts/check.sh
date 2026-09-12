@@ -8,6 +8,7 @@ step() { print -P "%F{blue}==>%f $1"; }
 step "swift-format"; swift format lint --strict --recursive Macup/Sources MacupTests
 step "swiftlint";    swiftlint --strict --quiet
 step "script syntax"; find Macup/Resources/Scripts tests scripts -name '*.sh' -exec zsh -n {} \;
+step "scan script"; tests/scan/test.sh
 step "xcodegen";     xcodegen generate >/dev/null
 step "build + unit tests"
 xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' -derivedDataPath build \
