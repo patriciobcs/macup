@@ -13,8 +13,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# macOS runners are not used: their minutes bill at ten times the rate. The app build, unit tests, view
-# render and macOS package-manager integration run locally through scripts/check.sh (see README).
+# Standard GitHub-hosted runners, macOS included, are free on public repositories, so the app is built
+# and tested here. The macOS package-manager integration in tests/macos still runs by hand: it installs
+# every manager and changes real packages.
 jobs:
   changes:
     name: What changed
@@ -25,6 +26,7 @@ jobs:
       pull-requests: read
     outputs:
       scripts: ${{ steps.filter.outputs.scripts }}
+      app: ${{ steps.filter.outputs.app }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -34,6 +36,15 @@ jobs:
             scripts:
               - 'Macup/Resources/Scripts/**'
               - 'tests/docker/**'
+              - '.github/workflows/ci.yml'
+            app:
+              - 'Macup/**'
+              - 'MacupTests/**'
+              - 'tests/scan/**'
+              - 'project.yml'
+              - 'scripts/**'
+              - '.swift-format'
+              - '.swiftlint.yml'
               - '.github/workflows/ci.yml'
 
   scripts-linux:
@@ -52,3 +63,28 @@ jobs:
         run: docker build -t macup-test -f tests/docker/Dockerfile .
       - name: Run
         run: docker run --rm macup-test
+
+  app:
+    name: Build and test (macOS)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # The same checks as a contributor runs: format, lint, script syntax, the scan tests, the unit
+      # tests, a render of every view, and coverage. scripts/check.sh is the one definition of them.
+      - name: Install the tools the checks need
+        run: brew install --quiet xcodegen swiftlint codecov-cli
+      - name: Check, test and measure coverage
+        env:
+          # Absent on forks, where check.sh measures coverage without uploading it.
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: scripts/check.sh
+      - name: Keep the test log when something fails
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-log
+          path: build/check.log
+          if-no-files-found: ignore

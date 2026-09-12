@@ -23,7 +23,7 @@ The app is a SwiftUI shell around three zsh scripts in `Macup/Resources/Scripts`
 
 ## Checks
 
-`scripts/check.sh` runs everything locally: format and lint checks, the unit tests, a coverage report, a render of every view from fixtures, the site checks and script syntax. `scripts/check.sh --bench` adds the Linux bench. CI enforces the same checks.
+`scripts/check.sh` runs everything locally: format and lint checks, the scan script tests, the unit tests, a coverage report, a render of every view from fixtures, the site checks and script syntax. `scripts/check.sh --bench` adds the Linux bench. CI runs the same script on a macOS runner, so what passes here passes there.
 
 Individually: `swift format --in-place --recursive Macup/Sources MacupTests` and `swiftlint` for the app (`brew install swiftlint`), `npm run check` inside `site/` for the website (ESLint, TypeScript, Prettier).
 
@@ -31,7 +31,7 @@ Individually: `swift format --in-place --recursive Macup/Sources MacupTests` and
 
 - **Unit tests** cover the parsers, version comparison, eligibility rules, process handling and the store.
 - **Scan script.** `tests/scan/test.sh` drives `macup-scan.sh` with stub tools on the PATH, so it runs in seconds without depending on what is installed. It covers the behaviour around the managers rather than the managers themselves: results streaming out as each one finishes, a failing manager not taking the others with it, hung managers timing out, the version appearing in failure messages, and bun's fallback for older versions.
-- **Linux bench.** `tests/docker/test.sh` builds an Ubuntu image with 14 managers and packages pinned to old versions, then runs the scan and dry-run upgrades and removals. Needs Docker or a compatible runtime. This is the one job CI runs, and only when scripts change.
+- **Linux bench.** `tests/docker/test.sh` builds an Ubuntu image with 14 managers and packages pinned to old versions, then runs the scan and dry-run upgrades and removals. Needs Docker or a compatible runtime. CI runs it when the scripts change.
 - **macOS integration.** `tests/macos/` installs every manager on a disposable Mac or VM, pins old packages, performs real upgrades and removals, and verifies each by rescanning. It is not run in CI, since macOS runner minutes bill at ten times the rate. Do not run `tests/macos/setup.sh` on a Mac you care about.
 
 ## Coverage
@@ -43,14 +43,14 @@ Individually: `swift format --in-place --recursive Macup/Sources MacupTests` and
 
 Code that runs the package managers themselves (`ScriptRunner.scan`, the upgrade and removal paths) is deliberately not covered here — that is what the Linux bench and the macOS integration tests are for.
 
-Coverage is tracked on [Codecov](https://codecov.io/gh/patriciobcs/macup), but the tests need macOS and CI runs no macOS runners, so the report is uploaded from a maintainer's machine instead of from a pull request:
+Coverage is tracked on [Codecov](https://codecov.io/gh/patriciobcs/macup). CI uploads it from the macOS job on every push and pull request that touches the app, so there is nothing to do by hand. To upload from your own machine instead:
 
 ```sh
 brew install codecov-cli
 CODECOV_TOKEN=<repository upload token> scripts/check.sh
 ```
 
-Without the token the report is still written locally, just not uploaded. Codecov statuses are informational and never block a pull request, since not every commit has a report attached; see `codecov.yml`.
+Without the token the report is still written locally, just not uploaded, which is also what happens for a pull request from a fork. Codecov statuses are informational and never block a pull request; see `codecov.yml`.
 
 ## Adding a package manager
 
