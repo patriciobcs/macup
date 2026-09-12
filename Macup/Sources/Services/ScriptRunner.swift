@@ -3,7 +3,13 @@ import Foundation
 /// Runs the bundled zsh scripts (Resources/Scripts) with the user's shell PATH.
 enum ScriptRunner {
     static func scriptURL(_ name: String) -> URL? {
-        Bundle.main.url(forResource: name, withExtension: "sh", subdirectory: "Scripts")
+        // Tests point this at stub scripts so the upgrade and removal paths can run for real without
+        // touching the machine's packages.
+        if let dir = ProcessInfo.processInfo.environment["MACUP_SCRIPT_DIR"], !dir.isEmpty {
+            let url = URL(fileURLWithPath: dir).appendingPathComponent("\(name).sh")
+            return FileManager.default.isExecutableFile(atPath: url.path) ? url : nil
+        }
+        return Bundle.main.url(forResource: name, withExtension: "sh", subdirectory: "Scripts")
     }
 
     static func environment(brewGreedy: Bool) async -> [String: String] {
@@ -18,14 +24,25 @@ enum ScriptRunner {
         return env
     }
 
-    static func scan(managers: [Manager], brewGreedy: Bool) async throws -> ScanResult {
+    /// `onReport` is called as each manager finishes, which is what lets the setup window fill in
+    /// rather than sit on a spinner until the slowest scanner returns.
+    static func scan(
+        managers: [Manager], brewGreedy: Bool, onReport: (@Sendable (ManagerReport) -> Void)? = nil
+    ) async throws -> ScanResult {
         guard let url = scriptURL("macup-scan") else {
             throw SubprocessError.launchFailed("macup-scan.sh missing from bundle")
         }
         let env = await environment(brewGreedy: brewGreedy)
+        let lines = LineBuffer()
         let r = try await Subprocess.run(
             executable: "/bin/zsh", arguments: [url.path] + managers.map(\.rawValue),
-            environment: env, timeout: 300, label: "The scan")
+            environment: env, timeout: 300, label: "The scan"
+        ) { chunk in
+            guard let onReport else { return }
+            for line in lines.take(chunk) {
+                for report in ScanParser.parse(line).reports { onReport(report) }
+            }
+        }
         return ScanParser.parse(r.stdout)
     }
 
@@ -65,5 +82,21 @@ enum ScriptRunner {
         return try await Subprocess.run(
             executable: "/bin/zsh", arguments: [url.path, tool],
             environment: env, timeout: 900, label: "Installing \(tool)", onOutput: onOutput)
+    }
+}
+
+/// Output arrives in chunks that can split a line in half, so the tail is held until the rest lands.
+final class LineBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pending = ""
+
+    func take(_ chunk: String) -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        pending += chunk
+        guard let last = pending.lastIndex(of: "\n") else { return [] }
+        let complete = pending[..<last]
+        pending = String(pending[pending.index(after: last)...])
+        return complete.split(separator: "\n").map(String.init)
     }
 }

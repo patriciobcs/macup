@@ -64,6 +64,7 @@ MacUp has no accounts and no telemetry. To do its job it does send some of your 
 - **Self-update of tools** applies only to copies installed by their own installers. Copies from Homebrew or npm are updated by those managers. When a tool's own updater fails, MacUp runs the vendor's documented installer script over HTTPS.
 - **pip on Homebrew's Python** refuses changes under PEP 668; MacUp retries with `--break-system-packages` and shows that in the log.
 - **Update All skips macOS updates** on purpose, since they need a restart. The row opens System Settings instead.
+- **Very old tool versions.** Scanning relies on each manager's machine-readable output, and some of those flags are not ancient: `pnpm outdated --format json` needs pnpm 7, `bun outdated -g` needs a recent bun (older ones are read from bun's global directory instead). A manager too old for its flag reports one error that names the version it is running, and the rest of the scan carries on.
 - **MacUp is not sandboxed** and is distributed outside the Mac App Store, because the App Store sandbox does not allow an app to run Homebrew or npm on your behalf. See [SECURITY.md](SECURITY.md).
 
 ## Contributing

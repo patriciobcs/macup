@@ -21,10 +21,14 @@ struct OnboardingView: View {
 
             Form {
                 Section {
-                    if store.reports.isEmpty {
-                        HStack {
-                            ProgressView().controlSize(.small)
+                    if store.isScanning {
+                        HStack(spacing: 10) {
                             Text("Looking for package managers…").foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(store.scanned.count) of \(store.scanTotal)")
+                                .foregroundStyle(.secondary).font(.callout).monospacedDigit()
+                            ProgressView(value: Double(store.scanned.count), total: Double(max(store.scanTotal, 1)))
+                                .frame(width: 90)
                         }
                     }
                     ForEach(Manager.allCases) { manager in
@@ -81,6 +85,9 @@ struct ManagerSetupRow: View {
             case .error, .skipped:
                 Label(report?.message ?? "Error", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                     .font(.callout).lineLimit(1)
+            case nil where store.isScanning:
+                // Each manager is checked on its own, so a row waiting says so rather than sitting blank.
+                ProgressView().controlSize(.small)
             case nil:
                 EmptyView()
             }

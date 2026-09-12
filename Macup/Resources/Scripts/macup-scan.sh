@@ -38,6 +38,9 @@ else mtime() { [[ -e "$1" ]] && stat -c %Y "$1" 2>/dev/null; }; fi
 # First dotted version number in a tool's --version output.
 self_version() { "$1" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1; }
 have()   { command -v "$1" >/dev/null 2>&1; }
+# The tool's version, for failure messages: a scanner that fails is most often simply too old for the
+# flags the scan relies on, and that is invisible in the error the tool prints (issue #12).
+vtag() { local v; v=$(self_version "$1"); [[ -n "$v" ]] && printf ' (%s %s)' "$1" "$v"; }
 # Last line of a command's stderr, cleaned up for display in the app.
 errline() {
   # Prefer a line that names the problem; otherwise the last non-empty line. One line, no control chars.
@@ -55,7 +58,7 @@ scan_brew() {
   have brew || { header brew missing; return; }
   local greedy=""; [[ "${MACUP_BREW_GREEDY:-0}" == 1 ]] && greedy="--greedy"
   local out; local err="$tmp/brew.err"
-  out=$(brew outdated --json=v2 $greedy 2>"$err") || { header brew error "brew outdated failed: $(errline "$err")"; return; }
+  out=$(brew outdated --json=v2 $greedy 2>"$err") || { header brew error "brew outdated failed$(vtag brew): $(errline "$err")"; return; }
   header brew ok
   local prefix; prefix=$(brew --prefix 2>/dev/null)
   brew_time() {  # $1 kind, $2 name, $3 installed version
@@ -91,7 +94,7 @@ scan_npm() {
   out=$(npm outdated -g --json 2>"$err"); local rc=$?
   # npm exits 1 when outdated packages exist; only treat non-JSON output as error.
   [[ -z "$out" ]] && out="{}"
-  [[ "$out" != \{* ]] && { header npm error "npm outdated failed: $(errline "$err")"; return; }
+  [[ "$out" != \{* ]] && { header npm error "npm outdated failed$(vtag npm): $(errline "$err")"; return; }
   header npm ok
   local root kind=global; root=$(npm root -g 2>/dev/null)
   [[ -n "$root" && -d "$root" && ! -w "$root" ]] && kind=system-global
@@ -111,9 +114,20 @@ scan_npm() {
 scan_bun() {
   have bun || { header bun missing; return; }
   local out; local err="$tmp/bun.err"
-  out=$(bun outdated -g --no-progress 2>"$err") || { header bun error "bun outdated failed: $(errline "$err")"; return; }
+  local home="${BUN_INSTALL:-$HOME/.bun}/install/global"
+  # Older bun does not take -g here: it looks for a package.json in the working directory and fails.
+  # Its own global directory has one, so fall back to reading that. Issue #12.
+  if ! out=$(bun outdated -g --no-progress 2>"$err"); then
+    if [[ -f "$home/package.json" ]]; then
+      out=$(cd "$home" && bun outdated --no-progress 2>"$err") \
+        || { header bun error "bun outdated failed$(vtag bun): $(errline "$err")"; return; }
+    else
+      header bun ok   # bun is installed but has no global packages, so nothing can be outdated
+      return
+    fi
+  fi
   header bun ok
-  local root="${BUN_INSTALL:-$HOME/.bun}/install/global/node_modules" name cur latest
+  local root="$home/node_modules" name cur latest
   # Table rows: | name | current | update | latest |
   printf '%s\n' "$out" | awk -F'|' '
     /^\|[^-]/ && $2 !~ /Package/ {
@@ -127,7 +141,7 @@ scan_pnpm() {
   local out; local err="$tmp/pnpm.err"
   out=$(pnpm outdated -g --format json 2>"$err"); local rc=$?
   [[ -z "$out" ]] && out="{}"
-  [[ "$out" != \{* ]] && { header pnpm error "pnpm outdated failed: $(errline "$err")"; return; }
+  [[ "$out" != \{* ]] && { header pnpm error "pnpm outdated failed$(vtag pnpm): $(errline "$err")"; return; }
   header pnpm ok
   local root; root=$(pnpm root -g 2>/dev/null)
   # pnpm JSON is compact or pretty; normalise to one key per line.
@@ -152,7 +166,7 @@ scan_pip() {
   # A pip inside a conda environment lists conda's own packages; Conda handles those.
   case "$site" in *conda*/*|*mamba*/*) header pip skipped "pip belongs to the conda environment; see Conda"; return ;; esac
   local out; local err="$tmp/pip.err"
-  out=$($py list --outdated --format=json --disable-pip-version-check 2>"$err") || { header pip error "pip list failed: $(errline "$err")"; return; }
+  out=$($py list --outdated --format=json --disable-pip-version-check 2>"$err") || { header pip error "pip list failed$(vtag "$py"): $(errline "$err")"; return; }
   header pip ok
   [[ -n "$site" && -d "$site" && ! -w "$site" ]] && kind=system-package
   # Compact JSON: [{"name": "...", "version": "...", "latest_version": "...", ...}, ...]
@@ -170,7 +184,7 @@ scan_pip() {
 scan_uv() {
   have uv || { header uv missing; return; }
   local out; local err="$tmp/uv.err"
-  out=$(uv tool list 2>"$err") || { header uv error "uv tool list failed: $(errline "$err")"; return; }
+  out=$(uv tool list 2>"$err") || { header uv error "uv tool list failed$(vtag uv): $(errline "$err")"; return; }
   header uv ok
   local dir name cur; dir=$(uv tool dir 2>/dev/null)
   # "name vX.Y.Z" lines; latest resolved by the app via PyPI.
@@ -181,7 +195,7 @@ scan_uv() {
 scan_cargo() {
   have cargo || { header cargo missing; return; }
   local out; local err="$tmp/cargo.err"
-  out=$(cargo install --list 2>"$err") || { header cargo error "cargo install --list failed: $(errline "$err")"; return; }
+  out=$(cargo install --list 2>"$err") || { header cargo error "cargo install --list failed$(vtag cargo): $(errline "$err")"; return; }
   header cargo ok
   local bin="${CARGO_HOME:-$HOME/.cargo}/bin" name cur exe
   # "name vX.Y.Z:" lines (skip local path/git installs which carry a "(...)" suffix) followed by indented
@@ -197,7 +211,7 @@ scan_rustup() {
   local out; local err="$tmp/rustup.err"
   # rustup >= 1.29 exits 100 when updates are available; older versions exit 0.
   out=$(rustup check 2>"$err"); local rc=$?
-  (( rc == 0 || rc == 100 )) || { header rustup error "rustup check failed: $(errline "$err")"; return; }
+  (( rc == 0 || rc == 100 )) || { header rustup error "rustup check failed$(vtag rustup): $(errline "$err")"; return; }
   header rustup ok
   # "stable-aarch64-apple-darwin - Update available : 1.93.0 (hash 2026-01-19) -> 1.98.1 (hash 2026-09-01)"  (rustup 1.28)
   # "stable-aarch64-apple-darwin - update available: 1.93.0 (hash 2026-01-19) -> 1.98.1 (hash 2026-09-01)"   (rustup 1.29)
@@ -214,7 +228,7 @@ scan_gem() {
   have gem || { header gem missing; return; }
   local dir; dir=$(gem environment gemdir 2>/dev/null)
   local out; local err="$tmp/gem.err"
-  out=$(gem outdated 2>"$err") || { header gem error "gem outdated failed: $(errline "$err")"; return; }
+  out=$(gem outdated 2>"$err") || { header gem error "gem outdated failed$(vtag gem): $(errline "$err")"; return; }
   # System Ruby installs into /Library, which needs an administrator password to change.
   local system=0
   if [[ -n "$dir" && ! -w "$dir" ]]; then header gem ok admin; system=1; else header gem ok; fi
@@ -237,7 +251,7 @@ scan_gem() {
 scan_mas() {
   have mas || { header mas missing; return; }
   local out; local err="$tmp/mas.err"
-  out=$(mas outdated 2>"$err") || { header mas error "mas outdated failed: $(errline "$err")"; return; }
+  out=$(mas outdated 2>"$err") || { header mas error "mas outdated failed$(vtag mas): $(errline "$err")"; return; }
   header mas ok
   local id name cur latest app when
   # "497799835 Xcode (15.0 -> 15.1)"
@@ -304,7 +318,7 @@ scan_tools() {
 scan_mise() {
   have mise || { header mise missing; return; }
   local out; local err="$tmp/mise.err"
-  out=$(mise outdated --json 2>"$err") || { header mise error "mise outdated failed: $(errline "$err")"; return; }
+  out=$(mise outdated --json 2>"$err") || { header mise error "mise outdated failed$(vtag mise): $(errline "$err")"; return; }
   header mise ok
   # { "node": { "current": "20.11.0", "latest": "20.12.2", ... }, ... }
   local name="" current="" latest="" where
@@ -326,7 +340,7 @@ scan_mise() {
 scan_pipx() {
   have pipx || { header pipx missing; return; }
   local out; local err="$tmp/pipx.err"
-  out=$(pipx list --json 2>"$err") || { header pipx error "pipx list failed: $(errline "$err")"; return; }
+  out=$(pipx list --json 2>"$err") || { header pipx error "pipx list failed$(vtag pipx): $(errline "$err")"; return; }
   header pipx ok
   # pipx needs Python, so Python is there to read its JSON. Latest resolved by the app via PyPI.
   printf '%s\n' "$out" | python3 -c '
@@ -363,7 +377,7 @@ scan_go() {
 scan_port() {
   have port || { header port missing; return; }
   local out; local err="$tmp/port.err"
-  out=$(port outdated 2>"$err") || { header port error "port outdated failed: $(errline "$err")"; return; }
+  out=$(port outdated 2>"$err") || { header port error "port outdated failed$(vtag port): $(errline "$err")"; return; }
   # MacPorts installs into /opt/local as root, so changes need an administrator password.
   header port ok admin
   # "git                            2.44.0_0 < 2.45.0_0"
@@ -379,7 +393,7 @@ scan_nix() {
     header nix missing; return
   fi
   local out; local err="$tmp/nix.err"
-  out=$(nix-env -u --dry-run 2>&1) || { header nix error "nix-env failed: $(printf '%s\n' "$out" | tail -n1 | cut -c1-160)"; return; }
+  out=$(nix-env -u --dry-run 2>&1) || { header nix error "nix-env failed$(vtag nix-env): $(printf '%s\n' "$out" | tail -n1 | cut -c1-160)"; return; }
   header nix ok
   # "upgrading 'hello-2.10' to 'hello-2.12'"  → split name/version at the first "-<digit>".
   printf '%s\n' "$out" | sed -nE "s/^upgrading '([^']+)' to '([^']+)'.*/\1\t\2/p" | \
@@ -393,7 +407,7 @@ scan_nix() {
 scan_composer() {
   have composer || { header composer missing; return; }
   local out; local err="$tmp/composer.err"
-  out=$(composer global outdated --direct --format=json 2>"$err") || { header composer error "composer outdated failed: $(errline "$err")"; return; }
+  out=$(composer global outdated --direct --format=json 2>"$err") || { header composer error "composer outdated failed$(vtag composer): $(errline "$err")"; return; }
   header composer ok
   local home; home=$(composer global config home 2>/dev/null)
   # Composer needs PHP, so PHP is there to read its JSON.
@@ -408,7 +422,7 @@ scan_conda() {
   local base; base=$(conda info --base 2>/dev/null)
   local out; local err="$tmp/conda.err"
   # The solver can take a while; the app allows the scan several minutes.
-  out=$(conda update --all --dry-run --json 2>"$err") || { header conda error "conda dry run failed: $(errline "$err")"; return; }
+  out=$(conda update --all --dry-run --json 2>"$err") || { header conda error "conda dry run failed$(vtag conda): $(errline "$err")"; return; }
   header conda ok
   printf '%s\n' "$out" | "$base/bin/python" -c '
 import json, sys
@@ -431,6 +445,7 @@ managers=("$@"); (( $# == 0 )) && managers=("${ALL[@]}")
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/macup.XXXXXX"); trap 'rm -rf "$tmp"' EXIT TERM INT HUP
 # Each manager gets its own deadline so one slow or hung tool cannot take the whole scan with it.
 deadline=${MACUP_MANAGER_TIMEOUT:-180}
+pids=()
 for m in "${managers[@]}"; do
   (
     trap - EXIT TERM INT HUP   # subshells inherit the cleanup trap; only the main shell may remove $tmp
@@ -443,10 +458,31 @@ for m in "${managers[@]}"; do
     pkill -P $watchdog 2>/dev/null; kill $watchdog 2>/dev/null; wait $watchdog 2>/dev/null
     mv -f "$tmp/$m.part" "$tmp/$m" 2>/dev/null
   ) &
+  pids+=($!)
+done
+
+# Emit each manager the moment it finishes instead of after the slowest one, so the app can show
+# progress rather than a spinner that cannot move. Only this shell writes, so blocks never interleave.
+pending=("${managers[@]}")
+while (( ${#pending[@]} )); do
+  remaining=()
+  for m in "${pending[@]}"; do
+    if [[ -e "$tmp/$m.timeout" ]]; then header "$m" error "took longer than ${deadline}s and was stopped"
+    elif [[ -e "$tmp/$m" ]]; then
+      if [[ -s "$tmp/$m" ]]; then cat "$tmp/$m"; else header "$m" error "scanner crashed"; fi
+    else
+      remaining+=("$m")
+    fi
+  done
+  pending=("${remaining[@]}")
+  (( ${#pending[@]} )) || break
+  # A worker that died before writing its file would otherwise leave us polling forever.
+  alive=0
+  for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && { alive=1; break }; done
+  if (( ! alive )); then
+    for m in "${pending[@]}"; do header "$m" error "scanner crashed"; done
+    break
+  fi
+  sleep 0.15
 done
 wait
-for m in "${managers[@]}"; do
-  if [[ -e "$tmp/$m.timeout" ]]; then header "$m" error "took longer than ${deadline}s and was stopped"
-  elif [[ -s "$tmp/$m" ]]; then cat "$tmp/$m"
-  else header "$m" error "scanner crashed"; fi
-done

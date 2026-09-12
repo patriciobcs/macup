@@ -3,7 +3,7 @@ import Foundation
 import Sparkle
 
 /// How this copy of MacUp got onto the Mac, which decides who updates it.
-enum InstallSource {
+enum InstallSource: Equatable {
     /// Installed with `brew install --cask macup`: Homebrew owns updates, Sparkle stays off.
     case homebrew
     /// Downloaded directly: Sparkle updates it, the brew cask (if any) is not involved.

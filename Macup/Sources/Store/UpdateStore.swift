@@ -22,9 +22,13 @@ final class UpdateStore {
     private(set) var revealMarker: String?
     private(set) var revealCount = 0
     private(set) var installing: Set<Manager> = []
+    /// Managers that have reported during the scan in flight, and how many were asked for. The setup
+    /// window uses these to show what has been checked instead of a spinner that cannot move.
+    private(set) var scanned: Set<Manager> = []
+    private(set) var scanTotal = 0
 
     private let settings = Preferences.shared
-    private let registry = Registry()
+    private let registry: Registry
     private let stateURL: URL
     let history: History
     private var scheduler: Task<Void, Never>?
@@ -36,14 +40,25 @@ final class UpdateStore {
 
     private let persistsState: Bool
 
-    /// `persist: false` gives an in-memory store that never reads or writes Application Support (fixtures).
-    init(persist: Bool = true) {
+    /// How this copy was installed, which decides whether MacUp updates itself through Homebrew.
+    /// Resolved lazily so a store is cheap to make; tests pass it in rather than moving the app.
+    private let installSourceOverride: InstallSource?
+    var installSource: InstallSource { installSourceOverride ?? AppUpdater.shared.source }
+
+    /// `persist: false` gives an in-memory store that never reads or writes Application Support
+    /// (fixtures). `directory` and `installSource` are only passed by tests.
+    init(persist: Bool = true, directory: URL? = nil, installSource: InstallSource? = nil) {
+        installSourceOverride = installSource
         persistsState = persist
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir =
+            directory
+            ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(persist ? "Macup" : "Macup-fixture", isDirectory: true)
         if persist { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
         stateURL = dir.appendingPathComponent("state.json")
         history = History(directory: dir)
+        // A store told where to live keeps its registry cache there too, so tests never touch the real one.
+        registry = Registry(directory: directory)
         if persist, let data = try? Data(contentsOf: stateURL),
             let saved = try? JSONDecoder.iso.decode(SavedState.self, from: data)
         {
@@ -150,7 +165,7 @@ final class UpdateStore {
     /// MacUp's own Homebrew cask when it is outdated. Only meaningful for Homebrew installs; a direct
     /// install is updated by Sparkle, so a stray cask is ignored there.
     var selfCaskUpdate: OutdatedPackage? {
-        guard AppUpdater.shared.source == .homebrew else { return nil }
+        guard installSource == .homebrew else { return nil }
         return packages.first { $0.manager == .brew && $0.name == "macup" }
     }
 
@@ -165,8 +180,14 @@ final class UpdateStore {
         }
         isScanning = true
         scanError = nil
+        scanned = []
+        scanTotal = targets.count
         do {
-            var result = try await ScriptRunner.scan(managers: targets, brewGreedy: settings.brewGreedy)
+            let onReport: @Sendable (ManagerReport) -> Void = { report in
+                Task { @MainActor [weak self] in self?.noteScanned(report) }
+            }
+            var result = try await ScriptRunner.scan(
+                managers: targets, brewGreedy: settings.brewGreedy, onReport: onReport)
             result.packages = await enrichVisible(result.packages)
             merge(result, scanned: targets)
             lastScan = Date()
@@ -181,6 +202,18 @@ final class UpdateStore {
             let again = Array(pendingRescan)
             pendingRescan.removeAll()
             await scan(managers: again)
+        }
+    }
+
+    /// One manager finished. Its result is shown straight away; the authoritative merge still happens
+    /// when the whole scan returns.
+    func noteScanned(_ report: ManagerReport) {
+        scanned.insert(report.manager)
+        if let i = reports.firstIndex(where: { $0.manager == report.manager }) {
+            reports[i] = report
+        } else {
+            reports.append(report)
+            reports.sort { Manager.allCases.firstIndex(of: $0.manager)! < Manager.allCases.firstIndex(of: $1.manager)! }
         }
     }
 
@@ -448,7 +481,7 @@ final class UpdateStore {
         for p in packages { firstSeen[p.versionKey] = now.addingTimeInterval(-3 * 86_400) }
     }
 
-    private func persist() {
+    func persist() {
         guard persistsState else { return }
         let s = SavedState(
             firstSeen: firstSeen, packages: packages, reports: reports, lastScan: lastScan, notified: notified)
