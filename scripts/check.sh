@@ -10,6 +10,8 @@ step "swiftlint";    swiftlint --strict --quiet
 step "script syntax"; find Macup/Resources/Scripts tests scripts -name '*.sh' -exec zsh -n {} \;
 step "scan script"; tests/scan/test.sh
 step "xcodegen";     xcodegen generate >/dev/null
+# build/ is ignored, so it does not exist in a fresh clone and tee has nowhere to write the log.
+mkdir -p build
 step "build + unit tests"
 xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' -derivedDataPath build \
   CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= test 2>&1 \
