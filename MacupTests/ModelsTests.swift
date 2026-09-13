@@ -128,14 +128,13 @@ final class InstallSourceTests: XCTestCase {
             InstallSource.detect(bundlePath: "/Applications/MacUp.app"), caskPresent ? .homebrew : .direct)
     }
 
-    /// Sparkle must stay asleep while the suite runs. A test build carries build number 1, so a live
-    /// updater finds the published release "newer", puts its window on screen and waits for a click
-    /// that never comes — which is a hung test run, not a failing one.
+    /// Nothing that waits on the user may run while the suite does. Sparkle would put its update
+    /// window on screen, and a notification request would wait for a permission prompt; neither is
+    /// ever answered, so the run hangs rather than fails. Both are gated on this one flag, and on a
+    /// machine where the answers were given long ago the gate is the only thing still proving it.
     @MainActor
-    func testTheUpdaterDoesNotStartDuringATestRun() {
-        XCTAssertNotNil(
-            ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"],
-            "the signal the updater relies on to know it is being tested")
-        XCTAssertFalse(AppUpdater.shared.hasLiveUpdater, "no updater was started")
+    func testNothingThatWaitsOnTheUserRunsDuringATestRun() {
+        XCTAssertTrue(AutomatedRun.isActive, "the suite must be recognisable as an automated run")
+        XCTAssertFalse(AppUpdater.shared.hasLiveUpdater, "so no updater was started")
     }
 }

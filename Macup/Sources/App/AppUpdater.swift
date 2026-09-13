@@ -27,17 +27,11 @@ final class AppUpdater {
     let source: InstallSource
     private let controller: SPUStandardUpdaterController?
 
-    /// A render or a test run must never start the updater. Automatic checks are on, and a build made
-    /// for either carries build number 1, so Sparkle would find the published release "newer", put its
-    /// update window on screen and wait for a click that is never coming.
-    private static var isAutomatedRun: Bool {
-        let env = ProcessInfo.processInfo.environment
-        return env["MACUP_SCREENSHOTS"] != nil || env["XCTestConfigurationFilePath"] != nil
-    }
-
     private init() {
         source = InstallSource.detect()
-        if source == .direct, !Self.isAutomatedRun {
+        // Never in a test or a render: Sparkle would find the published release newer than this build
+        // and wait at its update window for a click that is not coming. See AutomatedRun.
+        if source == .direct, !AutomatedRun.isActive {
             controller = SPUStandardUpdaterController(
                 startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         } else {

@@ -66,6 +66,9 @@ extension UpdateStore {
     func failure(for pkg: OutdatedPackage) -> String? { failures[pkg.id] }
     /// Asks before uninstalling. Returns true when the user confirmed.
     static func confirmRemoval(of pkg: OutdatedPackage) -> Bool {
+        // Nobody is there to answer a modal in a test or a render, and one raised there would wait for
+        // ever rather than fail. Nothing was confirmed, so nothing is removed. See AutomatedRun.
+        guard !AutomatedRun.isActive else { return false }
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "Remove \(pkg.name)?"

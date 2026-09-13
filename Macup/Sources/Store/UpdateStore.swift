@@ -453,7 +453,9 @@ final class UpdateStore {
     // MARK: Notifications
 
     private func notifyIfNeeded() async {
-        guard settings.notificationsEnabled else { return }
+        // Asking for permission in a test or a render never returns, because nothing answers the
+        // prompt. See AutomatedRun.
+        guard settings.notificationsEnabled, !AutomatedRun.isActive else { return }
         let fresh = eligible.filter { !notified.contains($0.versionKey) }
         guard !fresh.isEmpty else { return }
         let center = UNUserNotificationCenter.current()

@@ -8,18 +8,29 @@ final class StoreStateTests: XCTestCase {
     private let settings = Preferences.shared
     private var savedIgnored: Set<String> = []
     private var savedHideSystem = true
+    private var savedMinAge: Double = 24
+    private var savedSecurityMinAge: Double = 4
 
     override func setUp() async throws {
         // Preferences is a singleton backed by the real defaults, so put back whatever was there.
         savedIgnored = settings.ignoredPackages
         savedHideSystem = settings.hideSystemPackages
+        savedMinAge = settings.minAgeHours
+        savedSecurityMinAge = settings.securityMinAgeHours
         settings.ignoredPackages = []
         settings.hideSystemPackages = true
+        // What counts as settled is the subject of several of these tests, so it is pinned rather than
+        // inherited: another class that leaves the thresholds at zero, or a person whose own copy is
+        // configured differently, would otherwise decide the outcome here.
+        settings.minAgeHours = 24
+        settings.securityMinAgeHours = 4
     }
 
     override func tearDown() async throws {
         settings.ignoredPackages = savedIgnored
         settings.hideSystemPackages = savedHideSystem
+        settings.minAgeHours = savedMinAge
+        settings.securityMinAgeHours = savedSecurityMinAge
     }
 
     private func pkg(
