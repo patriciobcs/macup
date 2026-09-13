@@ -65,6 +65,11 @@ stub brokenpnpm '[[ "$1" == "--version" ]] && { echo "ERR_VM_DYNAMIC_IMPORT_CALL
 echo "TypeError: a dynamic import callback was not specified" >&2; exit 1' pnpm
 out=$(run brokenpnpm zsh "$SCAN" pnpm 2>/dev/null)
 check "a broken manager is an error, not an empty result" "$out" "M	pnpm	error"
+# It cannot say what version it is, so the next most useful fact is where it actually lives: a
+# corepack shim or a stale copy on the PATH shows up immediately.
+# The path is fully resolved, so match its tail rather than the temporary directory's spelling.
+check "a tool with no version reports its path instead" "$out" "(pnpm at /" \
+  && check "and the path points at the tool itself" "$out" "brokenpnpm/pnpm)"
 check "and the error says what the tool said" "$out" "dynamic import callback"
 
 # Nothing outdated is the normal case: npm prints nothing and exits cleanly.

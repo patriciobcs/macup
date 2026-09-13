@@ -44,12 +44,30 @@ header() {
 pkg()    { printf 'P\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${1//[$'\t\n']/ }" "${2//[$'\t\n']/ }" "${3//[$'\t\n']/ }" "${4//[$'\t\n']/ }" "${5//[$'\t\n']/ }" "${${6:-}//[$'\t\n']/ }" "${${7:-}//[$'\t\n']/ }"; }
 if stat -f %m / >/dev/null 2>&1; then mtime() { [[ -e "$1" ]] && stat -f %m "$1" 2>/dev/null; }
 else mtime() { [[ -e "$1" ]] && stat -c %Y "$1" 2>/dev/null; }; fi
-# First dotted version number in a tool's --version output.
-self_version() { "$1" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1; }
+# First dotted version number in a tool's --version output. A failing manager asks for this twice,
+# once for the error message and once for the header, and a cold tool can take a second to answer,
+# so the answer is remembered for the rest of the scan.
+typeset -A _version_cache
+self_version() {
+  [[ -n ${_version_cache[$1]+set} ]] && { print -r -- "${_version_cache[$1]}"; return }
+  local v; v=$("$1" --version 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+  _version_cache[$1]=$v
+  print -r -- "$v"
+}
 have()   { command -v "$1" >/dev/null 2>&1; }
+# Where a tool really lives, following symlinks. One spelling, used by both vtag and scan_tools.
+tool_path() { local p; p=$(command -v "$1" 2>/dev/null) || return 1; print -r -- "${p:A}" }
 # The tool's version, for failure messages: a scanner that fails is most often simply too old for the
 # flags the scan relies on, and that is invisible in the error the tool prints (issue #12).
-vtag() { local v; v=$(self_version "$1"); [[ -n "$v" ]] && printf ' (%s %s)' "$1" "$v"; }
+# A tool too broken to report its version can still say where it lives, and that is usually the
+# answer: a corepack shim standing in for pnpm, or a stale copy earlier on the PATH.
+vtag() {
+  local v p
+  v=$(self_version "$1")
+  [[ -n "$v" ]] && { printf ' (%s %s)' "$1" "$v"; return }
+  p=$(tool_path "$1") || return
+  [[ -n "$p" ]] && printf ' (%s at %s)' "$1" "$p"
+}
 # npm and pnpm exit non-zero both when packages are outdated and when they fall over, so the exit
 # code alone cannot tell the two apart. Printing nothing at all while complaining on stderr can only
 # be the second: reporting that as "nothing outdated" hides a broken tool.
