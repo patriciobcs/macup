@@ -41,6 +41,8 @@ Individually: `swift format --in-place --recursive Macup/Sources MacupTests` and
 - **unit** — the XCTest suite, which covers the parsers, versions, eligibility, the registry lookups, the store and the shell environment.
 - **render** — the offscreen render of every view from fixtures. SwiftUI view bodies only run when something draws them, so this is what covers `Macup/Sources/Views`. It proves a view builds and draws with the given state, nothing more; behaviour worth asserting belongs in a test.
 
+The report is split into two components, `logic` and `views`. Views are mostly layout, and a good share of their lines are tap handlers that only a real click can reach, so a blended figure says little about either half. As of writing: logic 94.8%, views 87.6%. Aim at the first.
+
 Code that runs the package managers themselves (`ScriptRunner.scan`, the upgrade and removal paths) is deliberately not covered here — that is what the Linux bench and the macOS integration tests are for.
 
 Coverage is tracked on [Codecov](https://codecov.io/gh/patriciobcs/macup). CI uploads it from the macOS job on every push and pull request that touches the app, so there is nothing to do by hand. To upload from your own machine instead:

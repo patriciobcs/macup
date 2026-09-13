@@ -20,6 +20,24 @@ flags:
     paths:
       - Macup/Sources/Views
 
+# Views are mostly layout, and a third of their lines are tap handlers that only a real click can
+# reach, so a single blended number says little. Components split the report without changing what is
+# measured or how it is uploaded: logic is where bugs live and is held to a high bar, views are
+# reported for visibility. Flags stay for test type (unit vs render), which is what flags are for.
+component_management:
+  individual_components:
+    - component_id: logic
+      name: logic
+      paths:
+        - Macup/Sources/Store/**
+        - Macup/Sources/Services/**
+        - Macup/Sources/Models/**
+        - Macup/Sources/App/**
+    - component_id: views
+      name: views
+      paths:
+        - Macup/Sources/Views/**
+
 ignore:
   - MacupTests
   - tests
