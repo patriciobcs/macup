@@ -12,10 +12,20 @@ step "scan script"; tests/scan/test.sh
 step "xcodegen";     xcodegen generate >/dev/null
 # build/ is ignored, so it does not exist in a fresh clone and tee has nowhere to write the log.
 mkdir -p build
-step "build + unit tests"
-xcodebuild -project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' -derivedDataPath build \
-  CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= test 2>&1 \
-  | tee build/check.log | grep -E "error:|Test Case .* failed|Executed .* tests|TEST" || true
+xcode=(-project Macup.xcodeproj -scheme Macup -destination 'platform=macOS' -derivedDataPath build
+  CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=)
+# Built and tested as two steps so a log without a tty still says which of the two is slow, and
+# --line-buffered so that log arrives as it happens rather than in one lump at the end.
+step "build"
+xcodebuild "${xcode[@]}" build 2>&1 | tee build/build.log | grep --line-buffered -E "error:|BUILD" || true
+grep -q "BUILD SUCCEEDED" build/build.log
+step "unit tests"
+# A test that hangs fails with its own name after two minutes instead of sitting there until the CI
+# job is killed, which says nothing about which test it was.
+xcodebuild "${xcode[@]}" test -test-timeouts-enabled YES \
+  -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 180 2>&1 \
+  | tee build/check.log \
+  | grep --line-buffered -E "error:|Test Case .* failed|Test Suite .* (started|failed)|Executed .* tests|TEST" || true
 grep -q "TEST SUCCEEDED" build/check.log
 step "render every view from fixtures"
 shots=$(mktemp -d "${TMPDIR:-/tmp}/macup-shots.XXXXXX")

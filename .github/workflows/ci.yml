@@ -81,10 +81,14 @@ jobs:
           # Absent on forks, where check.sh measures coverage without uploading it.
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         run: scripts/check.sh
-      - name: Keep the test log when something fails
-        if: failure()
+      # always(), not failure(): a job killed by the timeout counts as cancelled, and that is exactly
+      # the case where the log is the only way to find out what hung.
+      - name: Keep the test log
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: test-log
-          path: build/check.log
+          path: |
+            build/check.log
+            build/build.log
           if-no-files-found: ignore
