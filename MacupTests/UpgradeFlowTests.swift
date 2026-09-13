@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 
 @testable import Macup
@@ -6,97 +8,7 @@ import XCTest
 /// subprocess, the real log streaming and the real history writing; only the package manager at the
 /// far end is fake, because the alternative is changing packages on whoever runs the tests.
 @MainActor
-final class UpgradeFlowTests: XCTestCase {
-    private var directory = URL(fileURLWithPath: "/tmp")
-    private let settings = Preferences.shared
-    private struct SavedPreferences {
-        var minAge: Double
-        var securityMinAge: Double
-        var ignored: Set<String>
-        var hideSystem: Bool
-        var disabled: Set<Manager>
-    }
-    private var saved: SavedPreferences?
-
-    override func setUpWithError() throws {
-        // Preferences is the real singleton, and "eligible" depends on it: pin the thresholds so these
-        // tests do not depend on what the person running them has configured.
-        saved = SavedPreferences(
-            minAge: settings.minAgeHours, securityMinAge: settings.securityMinAgeHours,
-            ignored: settings.ignoredPackages, hideSystem: settings.hideSystemPackages,
-            disabled: settings.disabledManagers)
-        settings.minAgeHours = 0
-        settings.securityMinAgeHours = 0
-        settings.ignoredPackages = []
-        settings.hideSystemPackages = true
-        directory = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("macup-flow-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // A package whose name contains "boom" fails, which is how each test picks the outcome.
-        try script(
-            "macup-upgrade",
-            """
-            print "$ upgrading $2"
-            [[ "$2" == *boom* ]] && { print "Error: could not upgrade $2" >&2; exit 1 }
-            print "upgraded $2"
-            """)
-        try script(
-            "macup-remove",
-            """
-            print "$ removing $2"
-            [[ "$2" == *boom* ]] && { print "Error: could not remove $2" >&2; exit 1 }
-            print "removed $2"
-            """)
-        try script(
-            "macup-setup",
-            """
-            print "$ installing $1"
-            [[ "$1" == mas ]] && { print "installed"; exit 0 }
-            print "Error: unknown tool" >&2; exit 1
-            """)
-        // The rescan that follows every action reports each manager as present. MACUP_TEST_STILL_OUTDATED keeps one npm package outdated,
-        // marked as system-owned so it is skipped for release dates and no registry is contacted.
-        try script(
-            "macup-scan",
-            #"""
-            for m in "$@"; do printf 'M\t%s\tok\t\n' "$m"; done
-            [[ -n "${MACUP_TEST_STILL_OUTDATED:-}" ]] \
-              && printf 'P\tnpm\t%s\t1.0.0\t2.0.0\tsystem-global\t\t0\n' "$MACUP_TEST_STILL_OUTDATED"
-            """#)
-        setenv("MACUP_SCRIPT_DIR", directory.path, 1)
-    }
-
-    override func tearDownWithError() throws {
-        if let saved {
-            settings.minAgeHours = saved.minAge
-            settings.securityMinAgeHours = saved.securityMinAge
-            settings.ignoredPackages = saved.ignored
-            settings.hideSystemPackages = saved.hideSystem
-            settings.disabledManagers = saved.disabled
-        }
-        unsetenv("MACUP_SCRIPT_DIR")
-        unsetenv("MACUP_TEST_STILL_OUTDATED")
-        try? FileManager.default.removeItem(at: directory)
-    }
-
-    private func script(_ name: String, _ body: String) throws {
-        let url = directory.appendingPathComponent("\(name).sh")
-        try "#!/bin/zsh\n\(body)\n".write(to: url, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-    }
-
-    private func store() -> UpdateStore {
-        UpdateStore(persist: false, directory: directory)
-    }
-
-    private func pkg(_ name: String, manager: Manager = .npm, kind: String = "global") -> OutdatedPackage {
-        var p = OutdatedPackage(
-            manager: manager, name: name, installed: "1.0.0", latest: "2.0.0", kind: kind, extra: "")
-        p.releaseDate = Date().addingTimeInterval(-40 * 3600)
-        p.dateSource = .registry
-        return p
-    }
-
+final class UpgradeFlowTests: StubScriptCase {
     // MARK: Upgrading
 
     func testASuccessfulUpgradeIsLoggedAndRecorded() async {
@@ -113,11 +25,14 @@ final class UpgradeFlowTests: XCTestCase {
         XCTAssertEqual(store.history.records.first?.kind, .upgrade)
         XCTAssertEqual(store.history.records.first?.succeeded, true)
         XCTAssertEqual(store.history.records.first?.detail, "1.0.0 → 2.0.0")
+        XCTAssertEqual(
+            store.history.records.first?.output?.contains("upgraded lodash"), true,
+            "what the command printed is kept with the record, so the History tab can show it")
         XCTAssertFalse(store.isUpgrading(package), "the lock is released when it finishes")
     }
 
     func testAFailedUpgradeKeepsTheErrorAgainstThePackage() async {
-        setenv("MACUP_TEST_STILL_OUTDATED", "boom-pkg", 1)
+        try? keepOutdated("boom-pkg")
         let store = store()
         let package = pkg("boom-pkg")
         store.loadFixture(reports: [], packages: [package], log: "")
@@ -125,6 +40,9 @@ final class UpgradeFlowTests: XCTestCase {
         await store.upgrade(package)
 
         XCTAssertEqual(store.failure(for: package), "Error: could not upgrade boom-pkg")
+        XCTAssertEqual(
+            store.history.records.first?.output?.contains("Error: could not upgrade boom-pkg"), true,
+            "a failure keeps its output, which is the whole point of keeping it")
         XCTAssertTrue(store.log.contains("✗ exited with status 1"))
         XCTAssertEqual(store.history.records.first?.succeeded, false)
         XCTAssertEqual(store.history.records.first?.title, "Failed to update boom-pkg")
@@ -183,7 +101,7 @@ final class UpgradeFlowTests: XCTestCase {
     }
 
     func testAFailedRemovalIsReportedAgainstThePackage() async {
-        setenv("MACUP_TEST_STILL_OUTDATED", "boom-pkg", 1)
+        try? keepOutdated("boom-pkg")
         let store = store()
         let package = pkg("boom-pkg")
         store.loadFixture(reports: [], packages: [package], log: "")
@@ -270,7 +188,7 @@ final class UpgradeFlowTests: XCTestCase {
     }
 
     func testTheRowsAfterAnUpgradeHasFailed() async {
-        setenv("MACUP_TEST_STILL_OUTDATED", "boom-pkg", 1)
+        try? keepOutdated("boom-pkg")
         let store = store()
         let package = pkg("boom-pkg")
         store.loadFixture(reports: [], packages: [package], log: "")
@@ -284,10 +202,10 @@ final class UpgradeFlowTests: XCTestCase {
 
     func testAHomebrewCopyOffersItsOwnUpdateInThePanel() {
         // Installed by Homebrew, with its own cask outdated: the panel offers to update MacUp itself.
-        let store = UpdateStore(persist: false, directory: directory, installSource: .homebrew)
+        let store = store(installSource: .homebrew)
         var cask = pkg("macup", manager: .brew, kind: "cask")
         cask.installed = "1.0.0"
-        cask.latest = "1.1.0"
+        cask.latest = "99.0.0"  // newer than whatever version the tests are hosted in
         store.loadFixture(reports: [], packages: [cask, pkg("lodash")], log: "")
 
         XCTAssertEqual(store.selfCaskUpdate?.name, "macup")
@@ -295,8 +213,48 @@ final class UpgradeFlowTests: XCTestCase {
         renderOffscreen(MenuBarPanel().environment(store).environment(settings), size: CGSize(width: 320, height: 640))
     }
 
+    /// Every row in the panel lines its icon up at the same place. The app update row is a button and
+    /// the package rows are not, and the button style brings its own inset, so it is easy to knock the
+    /// two out of line without noticing.
+    func testEveryRowInThePanelLinesUp() throws {
+        let store = store(installSource: .homebrew)
+        var cask = pkg("macup", manager: .brew, kind: "cask")
+        cask.installed = "1.0.0"
+        cask.latest = "99.0.0"  // newer than whatever version the tests are hosted in
+        store.loadFixture(
+            reports: [], packages: [cask, pkg("rtk", manager: .brew, kind: "formula"), pkg("wrangler")],
+            log: "")
+
+        let rep = try XCTUnwrap(
+            renderBitmap(
+                MenuBarPanel().environment(store).environment(settings),
+                size: CGSize(width: 320, height: 420), settle: 0.4))
+
+        // The icon of each row is a filled accent circle, so the leftmost tinted pixel of each band of
+        // rows is where that row starts.
+        var starts: [Int] = []
+        var run: Int?
+        for y in 0..<rep.pixelsHigh {
+            let left = (0..<rep.pixelsWide).first { x in
+                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { return false }
+                return c.alphaComponent > 0.9 && c.blueComponent > 0.6 && c.redComponent < 0.5
+            }
+            switch (left, run) {
+            case (let l?, let current): run = min(l, current ?? l)
+            case (nil, let current?):
+                starts.append(current)
+                run = nil
+            default: break
+            }
+        }
+        if let run { starts.append(run) }
+
+        XCTAssertEqual(starts.count, 3, "one icon per row: the app update and two packages")
+        XCTAssertEqual(Set(starts).count, 1, "all rows start at the same x, got \(starts)")
+    }
+
     func testADirectCopyIgnoresAStrayCask() {
-        let store = UpdateStore(persist: false, directory: directory, installSource: .direct)
+        let store = store(installSource: .direct)
         let cask = pkg("macup", manager: .brew, kind: "cask")
         store.loadFixture(reports: [], packages: [cask], log: "")
         XCTAssertNil(store.selfCaskUpdate, "a downloaded copy updates through Sparkle instead")
@@ -406,5 +364,49 @@ final class UpgradeFlowTests: XCTestCase {
 
         XCTAssertNotNil(store.scanError, "the window shows why the scan could not run")
         XCTAssertFalse(store.isScanning)
+    }
+
+    func testOnboardingWhileAToolIsBeingInstalled() async throws {
+        // mas is offered when Homebrew is present, and shows its progress while it installs.
+        try script("macup-setup", "sleep 1.2; print installed")
+        let store = store()
+        store.loadFixture(
+            reports: [
+                ManagerReport(manager: .brew, status: .ok, message: ""),
+                ManagerReport(manager: .mas, status: .missing, message: ""),
+                ManagerReport(manager: .npm, status: .error, message: "Error: EACCES"),
+            ], packages: [], log: "")
+        renderOffscreen(
+            OnboardingView(close: {}).environment(store).environment(settings),
+            size: CGSize(width: 560, height: 700))
+
+        let install = Task { await store.installTool(.mas) }
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertTrue(store.isInstalling(.mas))
+        renderOffscreen(
+            OnboardingView(close: {}).environment(store).environment(settings),
+            size: CGSize(width: 560, height: 700))
+        await install.value
+        XCTAssertFalse(store.isInstalling(.mas))
+    }
+
+    func testTheHistoryPaneWithNothingRecorded() {
+        let store = store()
+        XCTAssertEqual(store.history.records, [])
+        renderOffscreen(
+            HistoryView(tab: .constant(1)).environment(store).environment(settings),
+            size: CGSize(width: 470, height: 400))
+    }
+
+    func testTheVersionAManagerReportedIsAvailableForBugReports() {
+        let store = store()
+        store.loadFixture(
+            reports: [
+                ManagerReport(manager: .brew, status: .ok, message: "", version: "4.2.1"),
+                ManagerReport(manager: .npm, status: .ok, message: ""),
+            ], packages: [], log: "")
+        XCTAssertEqual(store.version(of: .brew), "4.2.1")
+        XCTAssertEqual(store.version(of: .npm), "", "a manager that reported no version")
+        XCTAssertEqual(store.version(of: .conda), "", "a manager that never reported at all")
     }
 }

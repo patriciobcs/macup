@@ -17,6 +17,11 @@ final class Preferences {
     /// Include Homebrew casks that update themselves (brew outdated --greedy).
     var brewGreedy: Bool { didSet { d.set(brewGreedy, forKey: "brewGreedy") } }
     var notificationsEnabled: Bool { didSet { d.set(notificationsEnabled, forKey: "notificationsEnabled") } }
+    /// Install ready updates without being asked. Off by default: updating is the user's decision, and
+    /// only what has passed the minimum age is ever installed.
+    var autoUpdate: Bool { didSet { d.set(autoUpdate, forKey: "autoUpdate") } }
+    /// How much time must pass between automatic runs (hours). Default: a day.
+    var autoUpdateIntervalHours: Double { didSet { d.set(autoUpdateIntervalHours, forKey: "autoUpdateIntervalHours") } }
     var disabledManagers: Set<Manager> {
         didSet { d.set(disabledManagers.map(\.rawValue).sorted(), forKey: "disabledManagers") }
     }
@@ -47,6 +52,8 @@ final class Preferences {
         checkIntervalHours = d.object(forKey: "checkIntervalHours") as? Double ?? 6
         brewGreedy = d.bool(forKey: "brewGreedy")
         notificationsEnabled = d.object(forKey: "notificationsEnabled") as? Bool ?? true
+        autoUpdate = d.bool(forKey: "autoUpdate")
+        autoUpdateIntervalHours = d.object(forKey: "autoUpdateIntervalHours") as? Double ?? 24
         disabledManagers = Set((d.stringArray(forKey: "disabledManagers") ?? []).compactMap(Manager.init(rawValue:)))
         ignoredPackages = Set(d.stringArray(forKey: "ignoredPackages") ?? [])
         hideSystemPackages = d.object(forKey: "hideSystemPackages") as? Bool ?? true

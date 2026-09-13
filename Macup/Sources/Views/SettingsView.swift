@@ -8,6 +8,9 @@ struct SettingsView: View {
         ("Immediately", 0), ("1 hour", 1), ("4 hours", 4), ("12 hours", 12), ("1 day", 24), ("3 days", 72),
         ("1 week", 168),
     ]
+    private let autoChoices: [(String, Double)] = [
+        ("Once an hour", 1), ("Every 6 hours", 6), ("Once a day", 24), ("Twice a week", 84), ("Once a week", 168),
+    ]
     private let intervalChoices: [(String, Double)] = [
         ("Every hour", 1), ("Every 3 hours", 3), ("Every 6 hours", 6), ("Every 12 hours", 12), ("Once a day", 24),
     ]
@@ -24,6 +27,16 @@ struct SettingsView: View {
                 }
                 Picker("Check for updates", selection: $settings.checkIntervalHours) {
                     ForEach(intervalChoices, id: \.1) { Text($0.0).tag($0.1) }
+                }
+                Toggle("Install ready updates automatically", isOn: $settings.autoUpdate)
+                if settings.autoUpdate {
+                    Picker("Install at most", selection: $settings.autoUpdateIntervalHours) {
+                        ForEach(autoChoices, id: \.1) { Text($0.0).tag($0.1) }
+                    }
+                    Text(
+                        "Only updates that have passed the minimum age above are installed, and macOS updates are left alone because they need a restart. Anything that asks for an administrator password is skipped."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                 }
                 Text(
                     "Waiting before installing a fresh release gives maintainers time to pull broken or compromised versions. Security fixes for a version you have installed use the shorter delay."
@@ -50,13 +63,15 @@ struct SettingsView: View {
                         .small)
                 }
                 LabeledContent("MacUp \(store.appVersion)") {
-                    if AppUpdater.shared.source == .homebrew {
+                    // The store decides what updating MacUp means for this copy; asking AppUpdater here
+                    // would be a second answer to the same question.
+                    if store.installSource == .homebrew {
                         HStack(spacing: 8) {
                             Text("Installed with Homebrew").font(.caption).foregroundStyle(.secondary)
                             Button("Check Now") { Task { await store.scan(managers: [.brew]) } }.controlSize(.small)
                         }
                     } else {
-                        Button("Check for Updates…") { AppUpdater.shared.checkForUpdates() }.controlSize(.small)
+                        Button("Check for Updates…") { Task { await store.updateSelf() } }.controlSize(.small)
                     }
                 }
             }

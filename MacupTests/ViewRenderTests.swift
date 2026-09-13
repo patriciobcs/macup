@@ -102,7 +102,9 @@ final class ViewRenderTests: XCTestCase {
             store.history.add(
                 ActionRecord(
                     kind: kind, manager: .npm, package: "lodash", detail: "1.0.0 → 2.0.0",
-                    succeeded: kind != .remove))
+                    succeeded: kind != .remove,
+                    // With output kept, the row offers to show it.
+                    output: kind == .ignore ? nil : (1...12).map { "output line \($0)" }.joined(separator: "\n")))
         }
         return store
     }

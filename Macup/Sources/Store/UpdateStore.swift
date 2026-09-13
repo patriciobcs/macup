@@ -26,8 +26,12 @@ final class UpdateStore {
     /// window uses these to show what has been checked instead of a spinner that cannot move.
     private(set) var scanned: Set<Manager> = []
     private(set) var scanTotal = 0
+    /// When updates were last installed without being asked, so the interval is honoured across launches.
+    private(set) var lastAutoUpdate: Date?
 
-    private let settings = Preferences.shared
+    /// The same object the views bind to; not private only so the derived lists can live in their own
+    /// file without reaching for the singleton a second way.
+    let settings = Preferences.shared
     private let registry: Registry
     private let stateURL: URL
     let history: History
@@ -47,8 +51,16 @@ final class UpdateStore {
 
     /// `persist: false` gives an in-memory store that never reads or writes Application Support
     /// (fixtures). `directory` and `installSource` are only passed by tests.
-    init(persist: Bool = true, directory: URL? = nil, installSource: InstallSource? = nil) {
+    /// Updating MacUp itself replaces the running app, so tests substitute this rather than have the
+    /// test runner restart itself halfway through.
+    private let selfUpdateOverride: (@MainActor () async -> Void)?
+
+    init(
+        persist: Bool = true, directory: URL? = nil, installSource: InstallSource? = nil,
+        selfUpdate: (@MainActor () async -> Void)? = nil
+    ) {
         installSourceOverride = installSource
+        selfUpdateOverride = selfUpdate
         persistsState = persist
         let dir =
             directory
@@ -67,28 +79,11 @@ final class UpdateStore {
             reports = saved.reports
             lastScan = saved.lastScan
             notified = saved.notified
+            lastAutoUpdate = saved.lastAutoUpdate
         }
     }
 
     // MARK: Derived state
-
-    /// Packages minus the ones the user chose to ignore and, by default, the ones macOS owns.
-    var visible: [OutdatedPackage] {
-        packages.filter {
-            !settings.ignoredPackages.contains($0.id) && !(settings.hideSystemPackages && $0.isSystem)
-                && !Self.isSelfCask($0)
-        }
-    }
-    var hiddenSystemCount: Int { settings.hideSystemPackages ? packages.filter(\.isSystem).count : 0 }
-    var ignored: [OutdatedPackage] { packages.filter { settings.ignoredPackages.contains($0.id) } }
-
-    var eligible: [OutdatedPackage] {
-        visible.filter { isEligible($0) }
-    }
-
-    var waiting: [OutdatedPackage] {
-        visible.filter { !isEligible($0) }
-    }
 
     func ignore(_ pkg: OutdatedPackage) {
         settings.ignoredPackages.insert(pkg.id)
@@ -107,10 +102,6 @@ final class UpdateStore {
         }
     }
 
-    var badgeCount: Int { eligible.count }
-    /// What "Update All" will actually run (system updates are a hand-off to System Settings).
-    var updatableCount: Int { eligible.filter { !$0.manager.opensExternally }.count }
-
     func isEligible(_ pkg: OutdatedPackage) -> Bool {
         Eligibility.isEligible(
             pkg, minAge: settings.minAgeHours * 3600,
@@ -119,26 +110,6 @@ final class UpdateStore {
 
     func age(of pkg: OutdatedPackage) -> TimeInterval { Eligibility.age(of: pkg, firstSeen: firstSeen) }
     func referenceDate(of pkg: OutdatedPackage) -> Date? { Eligibility.referenceDate(for: pkg, firstSeen: firstSeen) }
-
-    /// True while this specific package is being upgraded (a manager-wide lock also covers rustup toolchains).
-    func isUpgrading(_ pkg: OutdatedPackage) -> Bool {
-        upgrading.contains(pkg.id) || (pkg.manager == .rustup && upgrading.contains(pkg.manager.rawValue))
-    }
-    func isUpgrading(_ manager: Manager) -> Bool { upgrading.contains(manager.rawValue) }
-    var isUpgradingAnything: Bool { !upgrading.isEmpty }
-
-    /// The version the last scan saw for a manager, for bug reports.
-    func version(of manager: Manager) -> String { reports.first { $0.manager == manager }?.version ?? "" }
-
-    func needsAdmin(_ manager: Manager) -> Bool { reports.first { $0.manager == manager }?.needsAdmin ?? false }
-
-    /// Managers that failed for reasons other than being offline: these deserve a report.
-    var problems: [ManagerReport] { reports.filter { $0.status == .error && !$0.isOffline } }
-    /// At least one manager could not reach the network in the last scan.
-    var isOffline: Bool { reports.contains { $0.isOffline } }
-
-    /// Managers that were found on this Mac (anything except "missing").
-    var discoveredManagers: [Manager] { reports.filter { $0.status != .missing }.map(\.manager) }
 
     // MARK: Scanning
 
@@ -163,16 +134,18 @@ final class UpdateStore {
     /// Called when the check interval changes: the next scan is rescheduled from now.
     func restartSchedule() { start() }
 
-    var appVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?" }
-
     /// MacUp's own Homebrew cask when it is outdated. Only meaningful for Homebrew installs; a direct
     /// install is updated by Sparkle, so a stray cask is ignored there.
     var selfCaskUpdate: OutdatedPackage? {
         guard installSource == .homebrew else { return nil }
-        return packages.first { $0.manager == .brew && $0.name == "macup" }
+        guard let cask = packages.first(where: { $0.manager == .brew && $0.name == "macup" }) else { return nil }
+        // Homebrew compares against the version it recorded when it installed, which is not always what
+        // is running: a copy replaced by hand is newer than the Caskroom thinks. Never offer an update
+        // that the running app already is.
+        return Version.isNewer(cask.latest, than: appVersion) ? cask : nil
     }
 
-    private static func isSelfCask(_ p: OutdatedPackage) -> Bool { p.manager == .brew && p.name == "macup" }
+    static func isSelfCask(_ p: OutdatedPackage) -> Bool { p.manager == .brew && p.name == "macup" }
 
     func scan(managers: [Manager]? = nil) async {
         let targets = managers ?? settings.enabledManagers
@@ -196,7 +169,8 @@ final class UpdateStore {
             lastScan = Date()
             clock = Date()
             persist()
-            await notifyIfNeeded()
+            // No point announcing updates that are about to be installed a moment later.
+            if !autoUpdateIsDue { await notifyIfNeeded() }
         } catch {
             scanError = error.localizedDescription
         }
@@ -206,6 +180,8 @@ final class UpdateStore {
             pendingRescan.removeAll()
             await scan(managers: again)
         }
+        // Only once the scan is over: an upgrade rescans, and that would otherwise just be queued.
+        await autoUpdateIfDue()
     }
 
     /// One manager finished. Its result is shown straight away; the authoritative merge still happens
@@ -272,6 +248,8 @@ final class UpdateStore {
 
     func upgradeAllEligible() async {
         await upgradeAll(managers: Manager.allCases)
+        // Last: updating MacUp replaces the running app, which would cut the batch short.
+        await updateSelf()
     }
 
     /// Upgrades one package at a time so each row gets its own result, then rescans once.
@@ -296,6 +274,48 @@ final class UpdateStore {
             }
         }
         if !touched.isEmpty { await scan(managers: touched) }
+        // MacUp updates itself last: a Homebrew upgrade relaunches the app, which would cut the rest of
+        // the batch short, and Sparkle takes over the window once it starts.
+    }
+
+    /// Updates MacUp itself the way this copy was installed. Nothing happens when it is already current.
+    /// The decision is made here; only the act of updating is substituted in tests, so the rules below
+    /// are the ones that actually run.
+    func updateSelf(unattended: Bool = false) async {
+        switch installSource {
+        case .homebrew:
+            guard let cask = selfCaskUpdate else { return }
+            // Replacing the app unasked deserves the same settling delay as everything else, and the
+            // cask goes through Homebrew, so it is subject to the same password rule.
+            if unattended, !isEligible(cask) || needsAdmin(.brew) { return }
+            if let selfUpdateOverride { return await selfUpdateOverride() }
+            await upgrade(cask)
+        case .direct:
+            // Sparkle puts a window on screen and takes focus, which has no place in a run nobody asked
+            // for. A direct install updates itself when the user checks.
+            guard !unattended else { return }
+            if let selfUpdateOverride { return await selfUpdateOverride() }
+            AppUpdater.shared.checkForUpdates()
+        }
+    }
+
+    /// Installs what is ready, at most once per chosen interval. Called after a scan, so it follows the
+    /// same schedule as checking.
+    var autoUpdateIsDue: Bool {
+        guard settings.autoUpdate, !isUpgradingAnything else { return false }
+        let interval = max(1, settings.autoUpdateIntervalHours) * 3600
+        if let lastAutoUpdate, Date().timeIntervalSince(lastAutoUpdate) < interval { return false }
+        return !eligible.isEmpty || selfCaskUpdate != nil
+    }
+
+    private func autoUpdateIfDue() async {
+        guard autoUpdateIsDue else { return }
+        lastAutoUpdate = Date()
+        persist()
+        // Anything that would ask for an administrator password is left for the user to do knowingly:
+        // an unattended run must never put a password prompt on screen out of nowhere.
+        await upgradeAll(managers: Manager.allCases.filter { !needsAdmin($0) })
+        await updateSelf(unattended: true)
     }
 
     /// Runs the upgrade script once. Callers manage the `upgrading` set and the rescan.
@@ -304,10 +324,11 @@ final class UpdateStore {
         let args = manager == .rustup ? [] : items.map(\.upgradeArgument)
         appendLog("\n\(Self.logMarker(manager: manager, names: items.map(\.name)))\n")
         var failure: String?
-        switch await runLogged({ emit in
+        let outcome = await runLogged({ emit in
             try await ScriptRunner.upgrade(
                 manager: manager, arguments: args, brewGreedy: self.settings.brewGreedy, onOutput: emit)
-        }) {
+        })
+        switch outcome {
         case .success(let result):
             let status = result.status
             if status == 0 {
@@ -320,13 +341,20 @@ final class UpdateStore {
             appendLog("✗ \(error.localizedDescription)\n")
             failure = error.localizedDescription
         }
+        // What the command printed, or the reason it never ran.
+        let output = (try? outcome.get())?.combined ?? failure ?? ""
         for item in items {
             if let failure { failures[item.id] = failure } else { failures.removeValue(forKey: item.id) }
-            history.add(
+        }
+        history.add(
+            items.enumerated().map { index, item in
                 ActionRecord(
                     kind: .upgrade, manager: manager, package: item.name,
-                    detail: failure ?? "\(item.installed) → \(item.latest)", succeeded: failure == nil))
-        }
+                    detail: failure ?? "\(item.installed) → \(item.latest)", succeeded: failure == nil,
+                    // One command covered them all, so the output hangs off the first row rather than
+                    // being stored once per package.
+                    output: index == 0 ? output : nil)
+            })
     }
 
     /// Uninstalls a package through its manager, logs the output, records the outcome and rescans.
@@ -336,9 +364,10 @@ final class UpdateStore {
         defer { upgrading.remove(pkg.id) }
         appendLog("\n\(Self.logMarker(manager: pkg.manager, names: [pkg.name])) remove\n")
         var failure: String?
-        switch await runLogged({ emit in
+        let outcome = await runLogged({ emit in
             try await ScriptRunner.remove(pkg: pkg, brewGreedy: self.settings.brewGreedy, onOutput: emit)
-        }) {
+        })
+        switch outcome {
         case .success(let result):
             let status = result.status
             if status == 0 {
@@ -351,15 +380,15 @@ final class UpdateStore {
             appendLog("✗ \(error.localizedDescription)\n")
             failure = error.localizedDescription
         }
+        // What the command printed, or the reason it never ran.
+        let output = (try? outcome.get())?.combined ?? failure ?? ""
         if let failure { failures[pkg.id] = failure } else { failures.removeValue(forKey: pkg.id) }
         history.add(
             ActionRecord(
                 kind: .remove, manager: pkg.manager, package: pkg.name,
-                detail: failure ?? pkg.installed, succeeded: failure == nil))
+                detail: failure ?? pkg.installed, succeeded: failure == nil, output: output))
         await scan(managers: [pkg.manager])
     }
-
-    func isInstalling(_ manager: Manager) -> Bool { installing.contains(manager) }
 
     /// Installs an optional helper tool (currently the App Store CLI, mas) and rescans it.
     func installTool(_ manager: Manager) async {
@@ -368,7 +397,10 @@ final class UpdateStore {
         defer { installing.remove(manager) }
         appendLog("\n── Install \(manager.rawValue) ──\n")
         var failure: String?
-        switch await runLogged({ emit in try await ScriptRunner.setup(tool: manager.rawValue, onOutput: emit) }) {
+        let outcome = await runLogged({ emit in
+            try await ScriptRunner.setup(tool: manager.rawValue, onOutput: emit)
+        })
+        switch outcome {
         case .success(let result):
             let status = result.status
             if status == 0 {
@@ -381,24 +413,13 @@ final class UpdateStore {
             appendLog("✗ \(error.localizedDescription)\n")
             failure = error.localizedDescription
         }
+        // What the command printed, or the reason it never ran.
+        let output = (try? outcome.get())?.combined ?? failure ?? ""
         history.add(
             ActionRecord(
                 kind: .install, manager: manager, package: manager.rawValue,
-                detail: failure ?? "via Homebrew", succeeded: failure == nil))
+                detail: failure ?? "via Homebrew", succeeded: failure == nil, output: output))
         if failure == nil { await scan(managers: [manager]) }
-    }
-
-    /// Asks before uninstalling. Returns true when the user confirmed.
-    static func confirmRemoval(of pkg: OutdatedPackage) -> Bool {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Remove \(pkg.name)?"
-        alert.informativeText =
-            "This uninstalls \(pkg.name) \(pkg.installed) using \(pkg.manager.title). You can install it again later."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Remove")
-        alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn
     }
 
     func clearLog() { log = "" }
@@ -418,25 +439,10 @@ final class UpdateStore {
         return outcome
     }
 
-    func failure(for pkg: OutdatedPackage) -> String? { failures[pkg.id] }
-
-    nonisolated static func logMarker(manager: Manager, names: [String]) -> String {
-        "── \(manager.title): \(names.joined(separator: ", ")) ──"
-    }
-
     /// Ask the window's log view to scroll to this package's most recent upgrade output.
     func reveal(_ pkg: OutdatedPackage) {
         revealMarker = Self.logMarker(manager: pkg.manager, names: [pkg.name])
         revealCount += 1
-    }
-
-    /// The most informative lines of a failed command: error lines if any, otherwise the last few lines.
-    nonisolated static func errorSummary(_ output: String, status: Int32) -> String {
-        let lines = output.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("$ ") }
-        let errors = lines.filter { $0.localizedCaseInsensitiveContains("error") }
-        let picked = (errors.isEmpty ? Array(lines.suffix(3)) : Array(errors.prefix(3)))
-        return picked.isEmpty ? "Exited with status \(status)" : picked.joined(separator: "\n")
     }
 
     private func appendLog(_ s: String) {
@@ -466,14 +472,6 @@ final class UpdateStore {
 
     // MARK: Persistence
 
-    private struct SavedState: Codable {
-        var firstSeen: [String: Date]
-        var packages: [OutdatedPackage]
-        var reports: [ManagerReport]
-        var lastScan: Date?
-        var notified: Set<String>
-    }
-
     /// Replaces the store's content without scanning (screenshots, previews).
     func loadFixture(reports: [ManagerReport], packages: [OutdatedPackage], log: String) {
         self.reports = reports
@@ -487,7 +485,8 @@ final class UpdateStore {
     func persist() {
         guard persistsState else { return }
         let s = SavedState(
-            firstSeen: firstSeen, packages: packages, reports: reports, lastScan: lastScan, notified: notified)
+            firstSeen: firstSeen, packages: packages, reports: reports, lastScan: lastScan, notified: notified,
+            lastAutoUpdate: lastAutoUpdate)
         if let data = try? JSONEncoder.iso.encode(s) { try? data.write(to: stateURL, options: .atomic) }
     }
 }

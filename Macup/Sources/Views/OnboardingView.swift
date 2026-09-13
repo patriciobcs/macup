@@ -42,6 +42,7 @@ struct OnboardingView: View {
                 }
                 Section("Preferences") {
                     Toggle("Launch at login", isOn: $settings.launchAtLogin)
+                    Toggle("Install ready updates automatically", isOn: $settings.autoUpdate)
                     Toggle("Notify me when updates are ready", isOn: $settings.notificationsEnabled)
                     Toggle("Hide packages that belong to macOS", isOn: $settings.hideSystemPackages)
                 }

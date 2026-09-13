@@ -86,7 +86,7 @@ struct MenuBarPanel: View {
                     IconCircle(symbol: "shippingbox.fill", tint: .accentColor)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("MacUp \(cask.latest) is available").font(.body)
-                        Text("You have \(cask.installed). Updates with Homebrew and relaunches.").font(.caption)
+                        Text("You have \(store.appVersion). Updates with Homebrew and relaunches.").font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -96,7 +96,9 @@ struct MenuBarPanel: View {
                         Image(systemName: "arrow.up.circle").font(.title3).foregroundStyle(.secondary)
                     }
                 }
-                .padding(.horizontal, 9).padding(.vertical, 3)
+                // No horizontal padding: MenuRowStyle already insets by 4 + 10, which is the 14 the
+                // package rows use, so anything here pushes this row out of line with them.
+                .padding(.vertical, 1)
             }
             .buttonStyle(MenuRowStyle()).disabled(store.isUpgradingAnything)
         }

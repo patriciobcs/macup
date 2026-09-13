@@ -68,4 +68,81 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(record(.ignore, "vite").title, "Ignored vite")
         XCTAssertEqual(record(.unignore, "vite").title, "Stopped ignoring vite")
     }
+
+    func testCommandOutputIsKeptWithTheRecord() {
+        let history = History(directory: directory)
+        history.add(
+            ActionRecord(
+                kind: .upgrade, manager: .brew, package: "jq", detail: "1.7 → 1.8", succeeded: true,
+                output: "==> Upgrading jq\n🍺 done"))
+
+        XCTAssertEqual(history.records.first?.output, "==> Upgrading jq\n🍺 done")
+        XCTAssertEqual(
+            History(directory: directory).records.first?.output, "==> Upgrading jq\n🍺 done",
+            "and it survives a relaunch, so a failure can be read the next morning")
+    }
+
+    func testOutputOlderThanAWeekIsForgottenButTheRecordStays() {
+        let history = History(directory: directory)
+        let old = ActionRecord(
+            id: UUID(), date: Date().addingTimeInterval(-8 * 86_400), kind: .upgrade, manager: .npm,
+            package: "lodash", detail: "1 → 2", succeeded: false, output: "pages and pages of build output")
+        history.add(old)
+
+        XCTAssertEqual(history.records.count, 1, "what was done is still on record")
+        XCTAssertEqual(history.records.first?.title, "Failed to update lodash")
+        XCTAssertNil(history.records.first?.output, "but a week-old build log is not worth keeping")
+    }
+
+    func testFreshOutputIsNotForgotten() {
+        let history = History(directory: directory)
+        history.add(
+            ActionRecord(
+                id: UUID(), date: Date().addingTimeInterval(-6 * 86_400), kind: .upgrade, manager: .npm,
+                package: "lodash", detail: "1 → 2", succeeded: true, output: "six days old"))
+        XCTAssertEqual(history.records.first?.output, "six days old")
+    }
+
+    func testAVeryLongOutputKeepsItsTail() {
+        // The end of a failed build is the part that says why it failed.
+        let history = History(directory: directory)
+        let long = String(repeating: "x", count: History.outputCap + 5_000) + "Error: the last line"
+        history.add(
+            ActionRecord(kind: .upgrade, manager: .brew, package: "big", detail: "", succeeded: false, output: long))
+
+        let stored = history.records.first?.output
+        XCTAssertEqual(stored?.count, History.outputCap)
+        XCTAssertEqual(stored?.hasSuffix("Error: the last line"), true)
+    }
+
+    func testOutputStopsAtABudgetSoTheFileCannotGrowForever() {
+        // Newest first, so what goes is the oldest output, not the one just recorded.
+        let history = History(directory: directory)
+        let chunk = String(repeating: "x", count: History.outputCap)
+        for i in 1...(History.outputBudget / History.outputCap + 3) {
+            history.add(
+                ActionRecord(
+                    kind: .upgrade, manager: .npm, package: "p\(i)", detail: "", succeeded: true,
+                    output: chunk))
+        }
+
+        let kept = history.records.compactMap(\.output)
+        XCTAssertLessThanOrEqual(kept.reduce(0) { $0 + $1.count }, History.outputBudget)
+        XCTAssertNotNil(history.records.first?.output, "the newest run keeps its output")
+        XCTAssertNil(history.records.last?.output, "the oldest gives it up")
+    }
+
+    func testExpiredOutputIsWrittenBackNotJustForgottenInMemory() throws {
+        let stale = ActionRecord(
+            id: UUID(), date: Date().addingTimeInterval(-9 * 86_400), kind: .upgrade, manager: .npm,
+            package: "old", detail: "", succeeded: true, output: "a week and a half of nothing")
+        try JSONEncoder.iso.encode([stale]).write(to: directory.appendingPathComponent("history.json"))
+
+        _ = History(directory: directory)  // loading prunes
+
+        let onDisk = try JSONDecoder.iso.decode(
+            [ActionRecord].self, from: Data(contentsOf: directory.appendingPathComponent("history.json")))
+        XCTAssertNil(onDisk.first?.output, "the file no longer carries it either")
+        XCTAssertEqual(onDisk.first?.package, "old")
+    }
 }

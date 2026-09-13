@@ -70,11 +70,38 @@ struct HistoryView: View {
 
 struct HistoryRow: View {
     let record: ActionRecord
+    @State private var showOutput = false
+
+    /// An empty string is the same as no output at all, so neither gets a disclosure arrow.
+    private var output: String? {
+        guard let output = record.output, !output.isEmpty else { return nil }
+        return output
+    }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            summary
+            if showOutput, let output {
+                HStack(spacing: 8) {
+                    Spacer()
+                    Button("Copy Output") { Support.copy(output) }.controlSize(.small)
+                }
+                ScrollView {
+                    Text(output)
+                        .font(.caption.monospaced()).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                }
+                .frame(maxHeight: 220)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var summary: some View {
         let r = record
         let tint: Color = r.succeeded ? (r.kind == .remove ? .orange : .green) : .red
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: icon).foregroundStyle(tint).frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
                 Text(r.title).font(.body)
@@ -89,8 +116,19 @@ struct HistoryRow: View {
                 Text(r.date, format: .dateTime.day().month(.abbreviated).hour().minute())
                     .font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }
+            // Output is kept for a week, so older entries have nothing to show.
+            if output != nil {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { showOutput.toggle() }
+                } label: {
+                    Image(systemName: showOutput ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(showOutput ? "Hide what the command printed" : "Show what the command printed")
+                .accessibilityLabel(showOutput ? "Hide output" : "Show output")
+            }
         }
-        .padding(.vertical, 2)
     }
 
     private func firstLine(_ s: String) -> String { s.split(separator: "\n").first.map(String.init) ?? s }

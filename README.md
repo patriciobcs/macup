@@ -29,6 +29,7 @@ MacUp keeps itself current the way it was installed. A Homebrew install lists it
 - **Discovers package managers.** Nineteen are supported (see the table below). Managers that are not installed stay out of the way.
 - **Waits for releases to settle.** An update is shown once the release is at least a day old, a security fix after four hours. Both thresholds are adjustable. Waiting gives maintainers time to pull a broken or compromised release before it reaches you.
 - **Shows the facts.** When the release was published, when your copy was installed, and whether the installed version has an advisory in [OSV.dev](https://osv.dev).
+- **Installs on its own, if you ask.** Off by default. Turn it on and MacUp installs what has passed the minimum age on a schedule you pick, leaving macOS updates and anything needing an administrator password for you to do knowingly.
 - **Runs the real commands.** Updates and removals use the manager's own tooling. Output streams into a log, and every action is recorded in a history.
 - **Respects the system.** Packages owned by macOS itself, such as the system Ruby's gems, are hidden by default. Anything that needs an administrator password asks through the standard macOS prompt, never a stored credential.
 - **Errors you can act on.** A failed manager shows one plain sentence with Retry, Copy Details and Report on GitHub. Being offline is one notice, not a list of errors.
