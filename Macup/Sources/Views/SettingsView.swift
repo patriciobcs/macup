@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var showAbsent = false
     @Environment(Preferences.self) private var settings
     @Environment(UpdateStore.self) private var store
 
@@ -76,30 +77,25 @@ struct SettingsView: View {
                 }
             }
             Section("Package managers") {
-                ForEach(Manager.allCases) { manager in
-                    let report = store.reports.first { $0.manager == manager }
-                    if manager == .mas && report?.status == .missing {
-                        ManagerSetupRow(manager: manager)
-                    } else {
-                        Toggle(
-                            isOn: Binding(
-                                get: { !settings.disabledManagers.contains(manager) },
-                                set: { on in
-                                    if on {
-                                        settings.disabledManagers.remove(manager)
-                                    } else {
-                                        settings.disabledManagers.insert(manager)
-                                    }
+                ForEach(present) { manager in
+                    ManagerSettingsRow(manager: manager, status: statusText(report(for: manager)))
+                }
+                if !absent.isEmpty {
+                    DisclosureGroup(isExpanded: $showAbsent) {
+                        ForEach(absent) { manager in
+                            if manager == .mas {
+                                ManagerSetupRow(manager: manager)
+                            } else {
+                                HStack {
+                                    Label(manager.title, systemImage: manager.symbol)
+                                    Spacer()
+                                    Text(statusText(report(for: manager))).font(.caption)
                                 }
-                            )
-                        ) {
-                            HStack {
-                                Label(manager.title, systemImage: manager.symbol)
-                                Spacer()
-                                Text(statusText(report)).font(.caption).foregroundStyle(.secondary)
+                                .foregroundStyle(.secondary)
                             }
                         }
-                        .disabled(report?.status == .missing)
+                    } label: {
+                        Text("^[\(absent.count) manager](inflect: true) not installed").foregroundStyle(.secondary)
                     }
                 }
             }
@@ -120,6 +116,19 @@ struct SettingsView: View {
         .onChange(of: settings.disabledManagers) { _, _ in Task { await store.scan() } }
         .onChange(of: settings.brewGreedy) { _, _ in Task { await store.scan(managers: [.brew]) } }
         .onChange(of: settings.checkIntervalHours) { _, _ in store.restartSchedule() }
+    }
+
+    private func report(for manager: Manager) -> ManagerReport? {
+        store.reports.first { $0.manager == manager }
+    }
+
+    /// Managers found on this Mac. Anything not scanned yet counts as present, so the list does not
+    /// start out claiming that nothing is installed.
+    private var present: [Manager] {
+        Manager.allCases.filter { report(for: $0)?.status != .missing }
+    }
+    private var absent: [Manager] {
+        Manager.allCases.filter { report(for: $0)?.status == .missing }
     }
 
     private func manager(_ r: ManagerReport) -> Manager { r.manager }

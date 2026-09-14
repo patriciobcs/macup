@@ -77,3 +77,54 @@ final class ManagerCommandsTests: XCTestCase {
         XCTAssertTrue(book[.tools].defaults[.check] == nil, "nor is asking GitHub about each tool")
     }
 }
+
+/// Replacing a command, and getting back to the original.
+@MainActor
+final class CommandOverrideTests: XCTestCase {
+    private let settings = Preferences.shared
+    private var saved: [String: String] = [:]
+    private let catalog = CommandCatalog.shared
+
+    override func setUp() async throws {
+        saved = settings.commandOverrides
+        settings.commandOverrides = [:]
+    }
+
+    override func tearDown() async throws { settings.commandOverrides = saved }
+
+    func testAReplacementIsKeptAndTypingTheOriginalBackForgetsIt() async {
+        await catalog.loadIfNeeded()
+        let original = catalog.book[.npm].defaults[.check]
+        try? XCTSkipIf(original == nil)
+
+        catalog.setCommand("npm outdated -g --json --depth=0", .check, .npm, settings: settings)
+        XCTAssertTrue(catalog.isChanged(.check, .npm, settings: settings))
+        XCTAssertEqual(catalog.command(.check, .npm, settings: settings), "npm outdated -g --json --depth=0")
+
+        // Typing the built-in command back in is the same as never having changed it, so the row stops
+        // saying "changed" and nothing is carried in the environment.
+        catalog.setCommand(original ?? "", .check, .npm, settings: settings)
+        XCTAssertFalse(catalog.isChanged(.check, .npm, settings: settings))
+        XCTAssertEqual(settings.commandOverrides, [:])
+    }
+
+    func testAnEmptyFieldMeansTheBuiltInCommand() async {
+        await catalog.loadIfNeeded()
+        catalog.setCommand("something", .remove, .npm, settings: settings)
+        catalog.setCommand("   ", .remove, .npm, settings: settings)
+        XCTAssertEqual(settings.commandOverrides, [:], "an empty field is not a command, it is a reset")
+    }
+
+    func testAReplacementReachesTheScripts() async {
+        // The scripts read MACUP_CMD_<phase>_<manager>; this is the step between the text field and
+        // there, and it is the one that would fail silently by leaving the default running.
+        settings.commandOverrides = ["check_npm": "npm outdated -g --json --depth=0"]
+        let env = await ScriptRunner.environment(brewGreedy: false)
+        XCTAssertEqual(env["MACUP_CMD_check_npm"], "npm outdated -g --json --depth=0")
+    }
+
+    func testNothingIsCarriedWhenNothingWasChanged() async {
+        let env = await ScriptRunner.environment(brewGreedy: false)
+        XCTAssertNil(env.first { $0.key.hasPrefix("MACUP_CMD_") }, "the scripts use their own defaults")
+    }
+}

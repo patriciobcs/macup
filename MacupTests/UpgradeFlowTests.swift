@@ -31,6 +31,47 @@ final class UpgradeFlowTests: StubScriptCase {
         XCTAssertFalse(store.isUpgrading(package), "the lock is released when it finishes")
     }
 
+    func testSettingsAndOnboardingWithManagersFoundAndMissing() {
+        // The lists separate what is on this Mac from what is not, and the tools row breaks apart into
+        // the individual tools, so both halves need to draw with a mixture of the two.
+        let store = store()
+        store.loadFixture(
+            reports: [
+                ManagerReport(manager: .brew, status: .ok, message: "", version: "4.2.1"),
+                ManagerReport(manager: .npm, status: .ok, message: ""),
+                ManagerReport(manager: .tools, status: .ok, message: ""),
+                ManagerReport(manager: .conda, status: .missing, message: ""),
+                ManagerReport(manager: .port, status: .missing, message: ""),
+                ManagerReport(manager: .mas, status: .missing, message: ""),
+            ], packages: [pkg("lodash")], log: "",
+            tools: [
+                ToolReport(name: "uv", presence: .found, detail: "0.12.13"),
+                ToolReport(name: "bun", presence: .managed, detail: "Homebrew"),
+                ToolReport(name: "deno", presence: .missing, detail: ""),
+            ])
+
+        renderOffscreen(
+            SettingsView().environment(store).environment(settings), size: CGSize(width: 520, height: 900))
+        renderOffscreen(
+            OnboardingView(close: {}).environment(store).environment(settings),
+            size: CGSize(width: 560, height: 700))
+    }
+
+    func testTheCommandsForAManagerDraw() {
+        // Including a manager whose commands are shown but cannot be edited, and one MacUp checks by
+        // reading files rather than by running anything.
+        let store = store()
+        store.loadFixture(reports: [], packages: [], log: "")
+        // Drawn inside a Form, which is where these live: a bare hosting view measures its content
+        // differently and says nothing about how the settings window behaves.
+        for manager in [Manager.npm, .port, .go] {
+            renderOffscreen(
+                Form { ManagerCommandsView(manager: manager) }
+                    .formStyle(.grouped).environment(store).environment(settings),
+                size: CGSize(width: 480, height: 320))
+        }
+    }
+
     func testRustupIsToldWhichOfItsPackagesWasAskedFor() async {
         // rustup itself and a toolchain need different commands from the script, so it has to be told
         // which was asked for. It used to be sent nothing at all, and the script guessed the toolchain

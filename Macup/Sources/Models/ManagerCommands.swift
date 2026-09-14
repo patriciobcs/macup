@@ -79,8 +79,13 @@ struct CommandBook: Equatable {
 
     init() {}
 
+    /// How a replacement is filed in preferences, e.g. "check_npm".
+    static func storeKey(_ phase: CommandPhase, _ manager: Manager) -> String {
+        "\(phase.rawValue)_\(manager.rawValue)"
+    }
+
     /// The environment key a replacement travels in, matching what the scripts look up.
     static func key(_ phase: CommandPhase, _ manager: Manager) -> String {
-        "MACUP_CMD_\(phase.rawValue)_\(manager.rawValue)"
+        "MACUP_CMD_" + storeKey(phase, manager)
     }
 }

@@ -4,6 +4,20 @@ import SwiftUI
 /// First-run setup. Also reachable from Settings. Shows what MacUp discovered, offers optional tools,
 /// and the two or three preferences worth deciding up front. Everything already works without it.
 struct OnboardingView: View {
+    @State private var showAbsent = false
+
+    /// Anything not yet scanned counts as present, so the list fills in rather than starting out
+    /// claiming nothing is installed.
+    private var present: [Manager] {
+        Manager.allCases.filter { manager in
+            store.reports.first { $0.manager == manager }?.status != .missing
+        }
+    }
+    private var absent: [Manager] {
+        Manager.allCases.filter { manager in
+            store.reports.first { $0.manager == manager }?.status == .missing
+        }
+    }
     @Environment(UpdateStore.self) private var store
     @Environment(Preferences.self) private var settings
     var close: () -> Void
@@ -31,14 +45,27 @@ struct OnboardingView: View {
                                 .frame(width: 90)
                         }
                     }
-                    ForEach(Manager.allCases) { manager in
+                    ForEach(present) { manager in
                         ManagerSetupRow(manager: manager)
+                    }
+                    if !absent.isEmpty {
+                        DisclosureGroup(isExpanded: $showAbsent) {
+                            ForEach(absent) { manager in
+                                ManagerSetupRow(manager: manager)
+                            }
+                        } label: {
+                            Text("^[\(absent.count) manager](inflect: true) not installed")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } header: {
                     Text("Package managers on this Mac")
                 } footer: {
-                    Text("MacUp found these automatically. Nothing to configure.").font(.caption).foregroundStyle(
-                        .secondary)
+                    Text(
+                        "Turn off any you would rather MacUp left alone. The commands it runs for each one "
+                            + "can be changed later, in Settings."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Preferences") {
                     Toggle("Launch at login", isOn: $settings.launchAtLogin)
@@ -61,14 +88,34 @@ struct OnboardingView: View {
     }
 }
 
-/// One manager in the setup list: found, not installed, or installable with one click.
+/// One manager in the setup list: found, not installed, or installable with one click. A manager that
+/// is here can be turned off, which is as much configuring as a first run should ask for; the commands
+/// it runs are in Settings.
 struct ManagerSetupRow: View {
     @Environment(UpdateStore.self) private var store
+    @Environment(Preferences.self) private var settings
     let manager: Manager
 
     var body: some View {
         let report = store.reports.first { $0.manager == manager }
         HStack {
+            if report?.status == .ok {
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { !settings.disabledManagers.contains(manager) },
+                        set: { on in
+                            if on {
+                                settings.disabledManagers.remove(manager)
+                            } else {
+                                settings.disabledManagers.insert(manager)
+                            }
+                        }
+                    )
+                )
+                .labelsHidden().controlSize(.small)
+                .accessibilityLabel("Use \(manager.title)")
+            }
             Label(manager.title, systemImage: manager.symbol)
                 .foregroundStyle(report?.status == .missing ? .secondary : .primary)
             Spacer()
