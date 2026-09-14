@@ -128,7 +128,17 @@ case "$manager" in
       (( ${#crates} )) && run cargo install --locked "${crates[@]}"
     fi ;;
   rustup)
-    run rustup update ;;
+    # `rustup update` syncs the toolchains and leaves rustup itself alone, so asking for "rustup" by
+    # name has to mean `rustup self update`. Running the wrong one of the two is silent: the command
+    # succeeds, the version it reported never moves, and the same update is offered after every scan.
+    toolchains=(${names:#rustup})
+    rc=0
+    if (( ${#names} == 0 )); then run rustup update || rc=$?
+    else
+      (( ${#toolchains} )) && { run rustup update "${toolchains[@]}" || rc=$? }
+      (( ${#names} != ${#toolchains} )) && { run rustup self update || rc=$? }
+    fi
+    exit $rc ;;
   gem)
     if (( ${#names} )); then gem_run update "${names[@]}"; else gem_run update; fi ;;
   mas)

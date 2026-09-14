@@ -31,6 +31,22 @@ final class UpgradeFlowTests: StubScriptCase {
         XCTAssertFalse(store.isUpgrading(package), "the lock is released when it finishes")
     }
 
+    func testRustupIsToldWhichOfItsPackagesWasAskedFor() async {
+        // rustup itself and a toolchain need different commands from the script, so it has to be told
+        // which was asked for. It used to be sent nothing at all, and the script guessed the toolchain
+        // one: asking to update rustup ran a command that could never do it, reported success, and
+        // offered the very same update again after the next scan.
+        let store = store()
+        let toolchain = pkg("stable-aarch64-apple-darwin", manager: .rustup, kind: "toolchain")
+        store.loadFixture(reports: [], packages: [toolchain], log: "")
+
+        await store.upgrade(toolchain)
+
+        XCTAssertTrue(
+            store.log.contains("upgrading stable-aarch64-apple-darwin"),
+            "the name reached the script, which is what picks the command: \(store.log)")
+    }
+
     func testAFailedUpgradeKeepsTheErrorAgainstThePackage() async {
         try? keepOutdated("boom-pkg")
         let store = store()

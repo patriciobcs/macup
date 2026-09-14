@@ -320,8 +320,7 @@ final class UpdateStore {
 
     /// Runs the upgrade script once. Callers manage the `upgrading` set and the rescan.
     private func runUpgrade(manager: Manager, packages items: [OutdatedPackage]) async {
-        // rustup upgrades the whole toolchain set at once; others take explicit names.
-        let args = manager == .rustup ? [] : items.map(\.upgradeArgument)
+        let args = items.map(\.upgradeArgument)
         appendLog("\n\(Self.logMarker(manager: manager, names: items.map(\.name)))\n")
         var failure: String?
         let outcome = await runLogged({ emit in
