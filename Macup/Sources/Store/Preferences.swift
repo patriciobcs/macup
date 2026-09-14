@@ -32,6 +32,9 @@ final class Preferences {
     var hasOnboarded: Bool { didSet { d.set(hasOnboarded, forKey: "hasOnboarded") } }
     /// Show the number of ready updates next to the menu bar icon. Default: on.
     var showMenuBarCount: Bool { didSet { d.set(showMenuBarCount, forKey: "showMenuBarCount") } }
+    /// Commands the user put in place of the built-in ones, keyed "<phase>_<manager>" e.g. "check_npm".
+    /// Empty for anything left alone, which is the normal case.
+    var commandOverrides: [String: String] { didSet { d.set(commandOverrides, forKey: "commandOverrides") } }
 
     /// Mirrors SMAppService; a failed registration snaps the toggle back instead of lying.
     var launchAtLogin: Bool {
@@ -60,6 +63,7 @@ final class Preferences {
         hasOnboarded = d.bool(forKey: "hasOnboarded")
         launchAtLogin = SMAppService.mainApp.status == .enabled
         showMenuBarCount = d.object(forKey: "showMenuBarCount") as? Bool ?? true
+        commandOverrides = d.dictionary(forKey: "commandOverrides") as? [String: String] ?? [:]
     }
 
     var enabledManagers: [Manager] { Manager.allCases.filter { !disabledManagers.contains($0) } }

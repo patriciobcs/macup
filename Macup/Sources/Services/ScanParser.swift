@@ -30,6 +30,12 @@ enum ScanParser {
                     pkg.updatedAt = Date(timeIntervalSince1970: epoch)
                 }
                 result.packages.append(pkg)
+            case "T":
+                guard f.count >= 3, !f[1].isEmpty,
+                    let presence = ToolReport.Presence(rawValue: f[2])
+                else { continue }
+                result.tools.append(
+                    ToolReport(name: f[1], presence: presence, detail: f.count > 3 ? f[3] : ""))
             default:
                 continue
             }

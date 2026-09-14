@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UserNotifications
 
 /// Pieces of the store that stand on their own: the questions the views ask of it, the removal
 /// prompt, the shapes of log markers and error summaries, and what is written to disk. Kept apart so
@@ -100,5 +101,27 @@ extension UpdateStore {
         var lastScan: Date?
         var notified: Set<String>
         var lastAutoUpdate: Date?
+    }
+
+    // MARK: Notifications
+
+    func notifyIfNeeded() async {
+        // Asking for permission in a test or a render never returns, because nothing answers the
+        // prompt. See AutomatedRun.
+        guard settings.notificationsEnabled, !AutomatedRun.isActive else { return }
+        let fresh = eligible.filter { !notified.contains($0.versionKey) }
+        guard !fresh.isEmpty else { return }
+        let center = UNUserNotificationCenter.current()
+        let granted = (try? await center.requestAuthorization(options: [.alert, .badge])) ?? false
+        guard granted else { return }
+        let content = UNMutableNotificationContent()
+        let security = fresh.filter(\.isSecurity).count
+        content.title = security > 0 ? "Security updates available" : "Updates available"
+        content.body =
+            fresh.prefix(4).map { "\($0.name) \($0.latest)" }.joined(separator: ", ")
+            + (fresh.count > 4 ? " and \(fresh.count - 4) more" : "")
+        try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        notified.formUnion(fresh.map(\.versionKey))
+        persist()
     }
 }

@@ -137,7 +137,27 @@ struct OutdatedPackage: Identifiable, Equatable, Codable, Hashable {
     var goModule: String? { manager == .go ? extra.split(separator: "|").first.map(String.init) : nil }
 }
 
+/// One self-installed tool and whether it is on this Mac. These are the tools nothing else updates
+/// (uv, bun, deno, pnpm, mise), so MacUp lists the ones it found and folds the rest away.
+struct ToolReport: Equatable, Identifiable, Codable {
+    enum Presence: String, Codable { case found, managed, missing }
+    var name: String
+    var presence: Presence
+    /// The version for a tool that is here, or who looks after it when another manager does.
+    var detail: String
+    var id: String { name }
+
+    var statusText: String {
+        switch presence {
+        case .found: detail.isEmpty ? "Found" : "Found · \(detail)"
+        case .managed: "Updated by \(detail)"
+        case .missing: "not installed"
+        }
+    }
+}
+
 struct ScanResult: Equatable {
     var reports: [ManagerReport] = []
     var packages: [OutdatedPackage] = []
+    var tools: [ToolReport] = []
 }

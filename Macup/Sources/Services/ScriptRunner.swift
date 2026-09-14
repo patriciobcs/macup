@@ -21,7 +21,37 @@ enum ScriptRunner {
         env["LANG"] = env["LANG"] ?? "en_US.UTF-8"
         env["TERM"] = "dumb"
         if brewGreedy { env["MACUP_BREW_GREEDY"] = "1" } else { env.removeValue(forKey: "MACUP_BREW_GREEDY") }
+        // Commands the user changed. The scripts fall back to their own defaults for everything else,
+        // and ignore these entirely for the managers that can run with an administrator password.
+        for (key, command) in await MainActor.run(body: { Preferences.shared.commandOverrides })
+        where !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            env["MACUP_CMD_\(key)"] = command
+        }
         return env
+    }
+
+    /// The commands the scripts would run, read from the scripts themselves so what the app shows is
+    /// what runs. Cheap: the script prints its table and exits without going near a package manager.
+    static func commands() async -> CommandBook {
+        guard let url = scriptURL("macup-scan") else { return CommandBook() }
+        let env = await environment(brewGreedy: false)
+        let result = try? await Subprocess.run(
+            executable: "/bin/zsh", arguments: [url.path, "--commands"],
+            environment: env, timeout: 30, label: "Reading the commands")
+        return CommandBook(commandLines: result?.stdout ?? "")
+    }
+
+    /// Runs one manager's check with a candidate command in place, and reports what came back. The
+    /// real scan is used, parser and all, because "is this command still understood" is exactly the
+    /// question the parser answers — a command that runs fine but prints something else finds nothing.
+    static func testCheck(manager: Manager, command: String, brewGreedy: Bool) async -> ScanResult {
+        guard let url = scriptURL("macup-scan") else { return ScanResult(reports: [], packages: []) }
+        var env = await environment(brewGreedy: brewGreedy)
+        env[CommandBook.key(.check, manager)] = command
+        let result = try? await Subprocess.run(
+            executable: "/bin/zsh", arguments: [url.path, manager.rawValue],
+            environment: env, timeout: 120, label: "Testing the \(manager.title) command")
+        return ScanParser.parse(result?.stdout ?? "")
     }
 
     /// `onReport` is called as each manager finishes, which is what lets the setup window fill in

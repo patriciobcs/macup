@@ -9,6 +9,8 @@ final class UpdateStore {
     static let shared = UpdateStore()
 
     private(set) var reports: [ManagerReport] = []
+    /// The self-installed tools the last scan looked for, whether or not they are here.
+    private(set) var tools: [ToolReport] = []
     private(set) var packages: [OutdatedPackage] = []
     private(set) var isScanning = false
     private(set) var lastScan: Date?
@@ -40,7 +42,9 @@ final class UpdateStore {
     private var pendingRescan: Set<Manager> = []
     /// Advances every few minutes so time-based eligibility re-renders without a new scan.
     private(set) var clock = Date()
-    private var notified: Set<String> = []
+    /// Versions already announced. Read and written by the notification code, which lives in
+    /// UpdateStore+Support.swift.
+    var notified: Set<String> = []
 
     private let persistsState: Bool
 
@@ -217,6 +221,9 @@ final class UpdateStore {
         reports = (reports.filter { !set.contains($0.manager) } + result.reports)
             .sorted { Manager.allCases.firstIndex(of: $0.manager)! < Manager.allCases.firstIndex(of: $1.manager)! }
         packages = packages.filter { !set.contains($0.manager) } + result.packages
+        // Only a scan that looked at the tools knows about them; a scan of one other manager must not
+        // wipe the list.
+        if set.contains(.tools) { tools = result.tools }
         // Track when each (package, version) pair was first observed. Pairs that vanish are kept for a
         // week, so a scan run offline (which cannot resolve some latest versions) does not reset the clock.
         let now = Date()
@@ -449,33 +456,14 @@ final class UpdateStore {
         if log.count > 200_000 { log = String(log.suffix(150_000)) }
     }
 
-    // MARK: Notifications
-
-    private func notifyIfNeeded() async {
-        // Asking for permission in a test or a render never returns, because nothing answers the
-        // prompt. See AutomatedRun.
-        guard settings.notificationsEnabled, !AutomatedRun.isActive else { return }
-        let fresh = eligible.filter { !notified.contains($0.versionKey) }
-        guard !fresh.isEmpty else { return }
-        let center = UNUserNotificationCenter.current()
-        let granted = (try? await center.requestAuthorization(options: [.alert, .badge])) ?? false
-        guard granted else { return }
-        let content = UNMutableNotificationContent()
-        let security = fresh.filter(\.isSecurity).count
-        content.title = security > 0 ? "Security updates available" : "Updates available"
-        content.body =
-            fresh.prefix(4).map { "\($0.name) \($0.latest)" }.joined(separator: ", ")
-            + (fresh.count > 4 ? " and \(fresh.count - 4) more" : "")
-        try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
-        notified.formUnion(fresh.map(\.versionKey))
-        persist()
-    }
-
     // MARK: Persistence
 
     /// Replaces the store's content without scanning (screenshots, previews).
-    func loadFixture(reports: [ManagerReport], packages: [OutdatedPackage], log: String) {
+    func loadFixture(
+        reports: [ManagerReport], packages: [OutdatedPackage], log: String, tools: [ToolReport] = []
+    ) {
         self.reports = reports
+        self.tools = tools
         self.packages = packages
         self.log = log
         self.lastScan = Date().addingTimeInterval(-90)

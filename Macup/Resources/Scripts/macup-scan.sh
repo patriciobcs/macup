@@ -32,6 +32,8 @@ export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR
 export npm_config_update_notifier=false
 
 # The binary behind a manager, where the names differ. Empty means there is nothing to ask.
+source "${0:A:h}/macup-commands.sh"
+
 tool_of() { case "$1" in nix) print nix-env ;; tools|macos) print "" ;; *) print "$1" ;; esac }
 # M<tab>manager<tab>status<tab>message<tab>version. The version travels with every manager that is
 # actually installed, so a bug report carries it without anyone having to ask (issue #12). Managers
@@ -41,6 +43,10 @@ header() {
   [[ "$2" != missing && -n "$tool" ]] && version=$(self_version "$tool")
   printf 'M\t%s\t%s\t%s\t%s\n' "$1" "$2" "${${3:-}//[$'\t\n']/ }" "$version"
 }
+# T<tab>tool<tab>status<tab>detail — which self-installed tools are on this Mac. "found" carries the
+# version, "managed" who looks after it instead, "missing" nothing. The app lists the ones that are
+# here and folds the rest away, rather than showing five rows that say "not installed".
+tool()   { printf 'T\t%s\t%s\t%s\n' "$1" "$2" "${${3:-}//[$'\t\n']/ }" }
 pkg()    { printf 'P\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${1//[$'\t\n']/ }" "${2//[$'\t\n']/ }" "${3//[$'\t\n']/ }" "${4//[$'\t\n']/ }" "${5//[$'\t\n']/ }" "${${6:-}//[$'\t\n']/ }" "${${7:-}//[$'\t\n']/ }"; }
 if stat -f %m / >/dev/null 2>&1; then mtime() { [[ -e "$1" ]] && stat -f %m "$1" 2>/dev/null; }
 else mtime() { [[ -e "$1" ]] && stat -c %Y "$1" 2>/dev/null; }; fi
@@ -55,6 +61,10 @@ self_version() {
   print -r -- "$v"
 }
 have()   { command -v "$1" >/dev/null 2>&1; }
+# check_cmd <manager> [key=value ...] — the command that lists this manager's updates: the user's
+# replacement when there is one, else the default. Its output is read by the parser below it, so a
+# replacement is expected to keep the shape the manager's own command produces.
+check_cmd() { macup_fill "$(macup_cmd check $1)" "${@:2}" }
 # Where a tool really lives, following symlinks. One spelling, used by both vtag and scan_tools.
 tool_path() { local p; p=$(command -v "$1" 2>/dev/null) || return 1; print -r -- "${p:A}" }
 # The tool's version, for failure messages: a scanner that fails is most often simply too old for the
@@ -89,7 +99,7 @@ scan_brew() {
   have brew || { header brew missing; return; }
   local greedy=""; [[ "${MACUP_BREW_GREEDY:-0}" == 1 ]] && greedy="--greedy"
   local out; local err="$tmp/brew.err"
-  out=$(brew outdated --json=v2 $greedy 2>"$err") || { header brew error "brew outdated failed$(vtag brew): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd brew "greedy=$greedy")" 2>"$err") || { header brew error "brew outdated failed$(vtag brew): $(errline "$err")"; return; }
   header brew ok
   local prefix; prefix=$(brew --prefix 2>/dev/null)
   brew_time() {  # $1 kind, $2 name, $3 installed version
@@ -122,7 +132,7 @@ scan_brew() {
 scan_npm() {
   have npm || { header npm missing; return; }
   local out; local err="$tmp/npm.err"
-  out=$(npm outdated -g --json 2>"$err"); local rc=$?
+  out=$(eval "$(check_cmd npm)" 2>"$err"); local rc=$?
   # npm exits 1 when outdated packages exist; only treat non-JSON output, or a silent failure, as error.
   crashed $rc "$out" "$err" && { header npm error "npm outdated failed$(vtag npm): $(errline "$err")"; return; }
   [[ -z "$out" ]] && out="{}"
@@ -149,7 +159,7 @@ scan_bun() {
   local home="${BUN_INSTALL:-$HOME/.bun}/install/global"
   # Older bun does not take -g here: it looks for a package.json in the working directory and fails.
   # Its own global directory has one, so fall back to reading that. Issue #12.
-  if ! out=$(bun outdated -g --no-progress 2>"$err"); then
+  if ! out=$(eval "$(check_cmd bun)" 2>"$err"); then
     if [[ -f "$home/package.json" ]]; then
       out=$(cd "$home" && bun outdated --no-progress 2>"$err") \
         || { header bun error "bun outdated failed$(vtag bun): $(errline "$err")"; return; }
@@ -171,7 +181,7 @@ scan_bun() {
 scan_pnpm() {
   have pnpm || { header pnpm missing; return; }
   local out; local err="$tmp/pnpm.err"
-  out=$(pnpm outdated -g --format json 2>"$err"); local rc=$?
+  out=$(eval "$(check_cmd pnpm)" 2>"$err"); local rc=$?
   crashed $rc "$out" "$err" && { header pnpm error "pnpm outdated failed$(vtag pnpm): $(errline "$err")"; return; }
   [[ -z "$out" ]] && out="{}"
   [[ "$out" != \{* ]] && { header pnpm error "pnpm outdated failed$(vtag pnpm): $(errline "$err")"; return; }
@@ -199,7 +209,7 @@ scan_pip() {
   # A pip inside a conda environment lists conda's own packages; Conda handles those.
   case "$site" in *conda*/*|*mamba*/*) header pip skipped "pip belongs to the conda environment; see Conda"; return ;; esac
   local out; local err="$tmp/pip.err"
-  out=$($py list --outdated --format=json --disable-pip-version-check 2>"$err") || { header pip error "pip list failed$(vtag "$py"): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd pip "python=$py")" 2>"$err") || { header pip error "pip list failed$(vtag "$py"): $(errline "$err")"; return; }
   header pip ok "" "$py"
   [[ -n "$site" && -d "$site" && ! -w "$site" ]] && kind=system-package
   # Compact JSON: [{"name": "...", "version": "...", "latest_version": "...", ...}, ...]
@@ -217,7 +227,7 @@ scan_pip() {
 scan_uv() {
   have uv || { header uv missing; return; }
   local out; local err="$tmp/uv.err"
-  out=$(uv tool list 2>"$err") || { header uv error "uv tool list failed$(vtag uv): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd uv)" 2>"$err") || { header uv error "uv tool list failed$(vtag uv): $(errline "$err")"; return; }
   header uv ok
   local dir name cur; dir=$(uv tool dir 2>/dev/null)
   # "name vX.Y.Z" lines; latest resolved by the app via PyPI.
@@ -228,7 +238,7 @@ scan_uv() {
 scan_cargo() {
   have cargo || { header cargo missing; return; }
   local out; local err="$tmp/cargo.err"
-  out=$(cargo install --list 2>"$err") || { header cargo error "cargo install --list failed$(vtag cargo): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd cargo)" 2>"$err") || { header cargo error "cargo install --list failed$(vtag cargo): $(errline "$err")"; return; }
   header cargo ok
   local bin="${CARGO_HOME:-$HOME/.cargo}/bin" name cur exe
   # "name vX.Y.Z:" lines (skip local path/git installs which carry a "(...)" suffix) followed by indented
@@ -243,7 +253,7 @@ scan_rustup() {
   have rustup || { header rustup missing; return; }
   local out; local err="$tmp/rustup.err"
   # rustup >= 1.29 exits 100 when updates are available; older versions exit 0.
-  out=$(rustup check 2>"$err"); local rc=$?
+  out=$(eval "$(check_cmd rustup)" 2>"$err"); local rc=$?
   (( rc == 0 || rc == 100 )) || { header rustup error "rustup check failed$(vtag rustup): $(errline "$err")"; return; }
   header rustup ok
   # "stable-aarch64-apple-darwin - Update available : 1.93.0 (hash 2026-01-19) -> 1.98.1 (hash 2026-09-01)"  (rustup 1.28)
@@ -261,7 +271,7 @@ scan_gem() {
   have gem || { header gem missing; return; }
   local dir; dir=$(gem environment gemdir 2>/dev/null)
   local out; local err="$tmp/gem.err"
-  out=$(gem outdated 2>"$err") || { header gem error "gem outdated failed$(vtag gem): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd gem)" 2>"$err") || { header gem error "gem outdated failed$(vtag gem): $(errline "$err")"; return; }
   # System Ruby installs into /Library, which needs an administrator password to change.
   local system=0
   if [[ -n "$dir" && ! -w "$dir" ]]; then header gem ok admin; system=1; else header gem ok; fi
@@ -284,7 +294,7 @@ scan_gem() {
 scan_mas() {
   have mas || { header mas missing; return; }
   local out; local err="$tmp/mas.err"
-  out=$(mas outdated 2>"$err") || { header mas error "mas outdated failed$(vtag mas): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd mas)" 2>"$err") || { header mas error "mas outdated failed$(vtag mas): $(errline "$err")"; return; }
   header mas ok
   local id name cur latest app when
   # "497799835 Xcode (15.0 -> 15.1)"
@@ -300,7 +310,7 @@ scan_mas() {
 scan_macos() {
   have softwareupdate || { header macos missing; return; }
   # --no-scan reads the list macOS refreshes in the background, so this stays fast.
-  local out; out=$(softwareupdate -l --no-scan 2>/dev/null) || { header macos ok; return; }
+  local out; out=$(eval "$(check_cmd macos)" 2>/dev/null) || { header macos ok; return; }
   header macos ok
   local current; current=$(sw_vers -productVersion 2>/dev/null)
   # "	Title: macOS Sequoia 15.6, Version: 15.6, Size: ..., Recommended: YES, Action: restart,"
@@ -321,19 +331,29 @@ scan_tools() {
   local found=0
   for spec in "${specs[@]}"; do
     IFS='|' read -r name repo prefix <<< "$spec"
-    have "$name" || continue
+    have "$name" || { tool "$name" missing; continue }
     bin=$(command -v "$name"); real=$(realpath "$bin" 2>/dev/null || print -r -- "$bin")
-    [[ -n "$brewp" && "$real" == "$brewp"/* ]] && continue
+    [[ -n "$brewp" && "$real" == "$brewp"/* ]] && { tool "$name" managed Homebrew; continue }
     case "$real" in
-      */node_modules/*|*/corepack/*|/nix/store/*|*/.rustup/*|*/mise/*|*/.asdf/*|/opt/local/*|/usr/local/Cellar/*) continue ;;
-      */pipx/venvs/*|*/site-packages/*|*/Python.framework/*|*/.local/share/uv/tools/*|*/.volta/*) continue ;;
+      */node_modules/*|*/corepack/*) tool "$name" managed npm; continue ;;
+      /nix/store/*) tool "$name" managed Nix; continue ;;
+      */mise/*) tool "$name" managed mise; continue ;;
+      */.asdf/*) tool "$name" managed asdf; continue ;;
+      /opt/local/*) tool "$name" managed MacPorts; continue ;;
+      */.rustup/*|/usr/local/Cellar/*) tool "$name" managed "another manager"; continue ;;
+      */pipx/venvs/*) tool "$name" managed pipx; continue ;;
+      */site-packages/*|*/Python.framework/*) tool "$name" managed pip; continue ;;
+      */.local/share/uv/tools/*) tool "$name" managed uv; continue ;;
+      */.volta/*) tool "$name" managed Volta; continue ;;
     esac
     # ~/.cargo/bin holds both `cargo install`ed crates (Cargo's job) and binaries older curl installers
     # dropped there (ours). Cargo's own registry of installed binaries tells them apart.
     case "$real" in
-      */.cargo/bin/*) grep -qs "\"$name\"" "${CARGO_HOME:-$HOME/.cargo}/.crates2.json" && continue ;;
+      */.cargo/bin/*) grep -qs "\"$name\"" "${CARGO_HOME:-$HOME/.cargo}/.crates2.json" \
+        && { tool "$name" managed Cargo; continue } ;;
     esac
-    cur=$(self_version "$name"); [[ -z "$cur" ]] && continue
+    cur=$(self_version "$name"); [[ -z "$cur" ]] && { tool "$name" missing; continue }
+    tool "$name" found "$cur"
     found=1
     # Latest tag from the releases/latest redirect: no API rate limit involved.
     ( tag=$(curl -sI -m 10 "https://github.com/$repo/releases/latest" | sed -nE 's#^[Ll]ocation: .*/tag/([^[:space:]]+).*#\1#p' | tr -d '\r')
@@ -351,7 +371,7 @@ scan_tools() {
 scan_mise() {
   have mise || { header mise missing; return; }
   local out; local err="$tmp/mise.err"
-  out=$(mise outdated --json 2>"$err") || { header mise error "mise outdated failed$(vtag mise): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd mise)" 2>"$err") || { header mise error "mise outdated failed$(vtag mise): $(errline "$err")"; return; }
   header mise ok
   # { "node": { "current": "20.11.0", "latest": "20.12.2", ... }, ... }
   local name="" current="" latest="" where
@@ -373,7 +393,7 @@ scan_mise() {
 scan_pipx() {
   have pipx || { header pipx missing; return; }
   local out; local err="$tmp/pipx.err"
-  out=$(pipx list --json 2>"$err") || { header pipx error "pipx list failed$(vtag pipx): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd pipx)" 2>"$err") || { header pipx error "pipx list failed$(vtag pipx): $(errline "$err")"; return; }
   header pipx ok
   # pipx needs Python, so Python is there to read its JSON. Latest resolved by the app via PyPI.
   printf '%s\n' "$out" | python3 -c '
@@ -410,7 +430,7 @@ scan_go() {
 scan_port() {
   have port || { header port missing; return; }
   local out; local err="$tmp/port.err"
-  out=$(port outdated 2>"$err") || { header port error "port outdated failed$(vtag port): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd port)" 2>"$err") || { header port error "port outdated failed$(vtag port): $(errline "$err")"; return; }
   # MacPorts installs into /opt/local as root, so changes need an administrator password.
   header port ok admin
   # "git                            2.44.0_0 < 2.45.0_0"
@@ -426,7 +446,7 @@ scan_nix() {
     header nix missing; return
   fi
   local out; local err="$tmp/nix.err"
-  out=$(nix-env -u --dry-run 2>&1) || { header nix error "nix-env failed$(vtag nix-env): $(printf '%s\n' "$out" | tail -n1 | cut -c1-160)"; return; }
+  out=$(eval "$(check_cmd nix)" 2>&1) || { header nix error "nix-env failed$(vtag nix-env): $(printf '%s\n' "$out" | tail -n1 | cut -c1-160)"; return; }
   header nix ok
   # "upgrading 'hello-2.10' to 'hello-2.12'"  → split name/version at the first "-<digit>".
   printf '%s\n' "$out" | sed -nE "s/^upgrading '([^']+)' to '([^']+)'.*/\1\t\2/p" | \
@@ -440,7 +460,7 @@ scan_nix() {
 scan_composer() {
   have composer || { header composer missing; return; }
   local out; local err="$tmp/composer.err"
-  out=$(composer global outdated --direct --format=json 2>"$err") || { header composer error "composer outdated failed$(vtag composer): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd composer)" 2>"$err") || { header composer error "composer outdated failed$(vtag composer): $(errline "$err")"; return; }
   header composer ok
   local home; home=$(composer global config home 2>/dev/null)
   # Composer needs PHP, so PHP is there to read its JSON.
@@ -455,7 +475,7 @@ scan_conda() {
   local base; base=$(conda info --base 2>/dev/null)
   local out; local err="$tmp/conda.err"
   # The solver can take a while; the app allows the scan several minutes.
-  out=$(conda update --all --dry-run --json 2>"$err") || { header conda error "conda dry run failed$(vtag conda): $(errline "$err")"; return; }
+  out=$(eval "$(check_cmd conda)" 2>"$err") || { header conda error "conda dry run failed$(vtag conda): $(errline "$err")"; return; }
   header conda ok
   printf '%s\n' "$out" | "$base/bin/python" -c '
 import json, sys
@@ -472,6 +492,9 @@ for p in acts.get("LINK", []):
 }
 
 ALL=(macos brew port npm bun pnpm pip pipx uv conda rustup cargo go gem composer nix mise tools mas)
+# The app asks for the commands so it can show them and offer to change them. Printed from the same
+# table the scan runs from, so what is shown is what runs.
+[[ "${1:-}" == --commands ]] && { macup_print_commands; exit 0 }
 managers=("$@"); (( $# == 0 )) && managers=("${ALL[@]}")
 
 # Run managers concurrently, each into its own temp file, then emit in stable order.

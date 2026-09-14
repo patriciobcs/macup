@@ -28,6 +28,23 @@ final class ScanParserTests: XCTestCase {
         XCTAssertEqual(ScanParser.dayFormatter.string(from: r.packages[3].releaseDate!), "2026-09-01")
     }
 
+    func testReadsWhichSelfInstalledToolsAreHere() {
+        // The tools list is the one place MacUp reports what it did not find, so the user can see that
+        // deno was looked for and that bun is Homebrew's to update, not MacUp's.
+        let result = ScanParser.parse(
+            "T\tuv\tfound\t0.12.13\nT\tbun\tmanaged\tHomebrew\nT\tdeno\tmissing\t\nM\ttools\tok\t\t")
+
+        XCTAssertEqual(result.tools.map(\.name), ["uv", "bun", "deno"])
+        XCTAssertEqual(result.tools[0].statusText, "Found · 0.12.13")
+        XCTAssertEqual(result.tools[1].statusText, "Updated by Homebrew")
+        XCTAssertEqual(result.tools[2].statusText, "not installed")
+        XCTAssertEqual(result.reports.count, 1, "the manager line is still read alongside them")
+    }
+
+    func testAToolLineThatMakesNoSenseIsSkipped() {
+        XCTAssertEqual(ScanParser.parse("T\tuv\tsideways\t1.0\nT\t\tfound\t1.0").tools, [])
+    }
+
     func testIgnoresUnknownManager() {
         let r = ScanParser.parse("M\tzzz\tok\t\nP\tzzz\tfoo\t1\t2\tpkg\t")
         XCTAssertTrue(r.reports.isEmpty)

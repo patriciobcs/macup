@@ -19,6 +19,8 @@ if [[ -z "${PNPM_HOME:-}" ]]; then
 fi
 export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1 npm_config_update_notifier=false CI=1
 
+source "${0:A:h}/macup-commands.sh"
+
 (( $# >= 2 )) || { echo "usage: $0 <manager> <name> [kind]" >&2; exit 64; }
 manager=$1; name=$2; kind=${3:-}
 
@@ -28,14 +30,25 @@ run() {
   "$@"
 }
 
+# run_cmd <command line> — the same, for a command that came from the table rather than from argv.
+# The line is run by the shell, so a replacement of the user's may pipe and redirect like any other.
+run_cmd() {
+  printf '$ %s\n' "$1"
+  [[ "${MACUP_DRY_RUN:-0}" == 1 ]] && return 0
+  eval "$1"
+}
+
+# remove_cmd <manager> [key=value ...] — the resolved, filled-in removal command for this manager.
+remove_cmd() { macup_fill "$(macup_cmd remove $1)" "name=${(q)name}" "${@:2}" }
+
 # pip on a PEP 668 "externally managed" Python (Homebrew's) refuses changes until told the user knows.
 # The package is already there, so retry with the flag when pip asks for it.
-pip_run() {
+pip_run_cmd() {
   local cap; cap=$(mktemp "${TMPDIR:-/tmp}/macup-pip.XXXXXX")
-  run "$@" 2>&1 | tee "$cap"; local st=$pipestatus[1]
+  run_cmd "$1" 2>&1 | tee "$cap"; local st=$pipestatus[1]
   if (( st != 0 )) && grep -q "externally-managed-environment" "$cap"; then
     echo "→ externally managed Python (PEP 668); retrying with --break-system-packages"
-    run "$@" --break-system-packages; st=$?
+    run_cmd "$1 --break-system-packages"; st=$?
   fi
   rm -f "$cap"; return $st
 }
@@ -70,22 +83,24 @@ gem_run() {
 case "$manager" in
   # --force removes every installed version (brew keeps old kegs after upgrades) and casks whose app
   # was already deleted by hand.
-  brew)   if [[ "$kind" == cask ]]; then run brew uninstall --cask --force -- "$name"; else run brew uninstall --force -- "$name"; fi ;;
-  npm)    run npm uninstall -g "$name" ;;
-  bun)    run bun remove -g "$name" ;;
-  pnpm)   run pnpm remove -g "$name" ;;
-  pip)    py=pip3; command -v pip3 >/dev/null 2>&1 || py=pip; pip_run $py uninstall -y "$name" ;;
-  uv)     run uv tool uninstall "$name" ;;
-  cargo)  run cargo uninstall "$name" ;;
-  gem)    gem_run uninstall -x -a "$name" ;;
-  pipx)     run pipx uninstall "$name" ;;
+  brew)   run_cmd "$(remove_cmd brew "kind=$([[ "$kind" == cask ]] && print -- --cask)")" ;;
+  npm)    run_cmd "$(remove_cmd npm)" ;;
+  bun)    run_cmd "$(remove_cmd bun)" ;;
+  pnpm)   run_cmd "$(remove_cmd pnpm)" ;;
+  pip)    py=pip3; command -v pip3 >/dev/null 2>&1 || py=pip; pip_run_cmd "$(remove_cmd pip "python=$py")" ;;
+  uv)     run_cmd "$(remove_cmd uv)" ;;
+  cargo)  run_cmd "$(remove_cmd cargo)" ;;
+  pipx)     run_cmd "$(remove_cmd pipx)" ;;
   go)       bin=$(go env GOBIN 2>/dev/null); [[ -z "$bin" ]] && bin="$(go env GOPATH 2>/dev/null)/bin"
             [[ -f "$bin/$name" ]] || bin="$HOME/go/bin"
             [[ -f "$bin/$name" ]] || { echo "$name not found in GOBIN or ~/go/bin" >&2; exit 1; }
-            run rm -f "$bin/$name" ;;
+            run_cmd "$(remove_cmd go "gobin=${(q)bin}")" ;;
+  nix)      run_cmd "$(remove_cmd nix)" ;;
+  composer) run_cmd "$(remove_cmd composer)" ;;
+  # These two can end up running with administrator privileges, and what runs as root is never taken
+  # from a setting: only a root-owned executable this script names itself is elevated.
+  gem)      gem_run uninstall -x -a "$name" ;;
   port)     as_admin /opt/local/bin/port -N uninstall "$name" ;;
-  nix)      run nix-env -e "$name" ;;
-  composer) run composer global remove --no-interaction "$name" ;;
   rustup|mas|macos|tools|mise|conda) echo "Removing is not supported for $manager" >&2; exit 65 ;;
   *) echo "unknown manager: $manager" >&2; exit 64 ;;
 esac
