@@ -12,13 +12,17 @@ struct ManagerCommandsView: View {
             if let reason = manager.notEditableReason {
                 Label(reason, systemImage: "lock").font(.caption).foregroundStyle(.secondary)
             }
-            let phases = catalog.book[manager].phases
-            if phases.isEmpty {
-                Text("MacUp checks this one by looking at the files it installed, rather than by running a command.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            ForEach(phases) { phase in
-                CommandField(manager: manager, phase: phase)
+            // Every phase is listed, whether or not there is a command behind it: a row that simply
+            // vanished would leave the reason to guesswork.
+            ForEach(CommandPhase.allCases) { phase in
+                if catalog.book[manager].defaults[phase] != nil {
+                    CommandField(manager: manager, phase: phase)
+                } else if let reason = manager.noCommandReason(phase) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(phase.title).font(.caption.bold()).foregroundStyle(.secondary)
+                        Text(reason).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .padding(.vertical, 4)
@@ -99,16 +103,7 @@ private struct CommandField: View {
         defer { testing = false }
         let scan = await ScriptRunner.testCheck(
             manager: manager, command: text, brewGreedy: settings.brewGreedy)
-        let report = scan.reports.first { $0.manager == manager }
-        if let report, report.status == .error {
-            result = "✗ \(report.message)"
-        } else if scan.packages.isEmpty {
-            result =
-                "✓ ran, but nothing was understood. Either there is nothing to update, or the output is "
-                + "not in the shape MacUp reads."
-        } else {
-            result = "✓ understood \(scan.packages.count) package\(scan.packages.count == 1 ? "" : "s")"
-        }
+        result = CommandTest.message(for: scan, manager: manager)
     }
 }
 

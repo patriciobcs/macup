@@ -6,7 +6,7 @@ import ServiceManagement
 @Observable @MainActor
 final class Preferences {
     static let shared = Preferences()
-    private let d = UserDefaults.standard
+    private let d: UserDefaults
 
     /// Regular updates are shown once the release is at least this old (hours). Default: 1 day.
     var minAgeHours: Double { didSet { d.set(minAgeHours, forKey: "minAgeHours") } }
@@ -49,7 +49,11 @@ final class Preferences {
         }
     }
 
-    private init() {
+    /// The defaults below are the product's answer to "what should MacUp do before anyone configures
+    /// it", so they are worth pinning down. `defaults` exists to let a test read them from an empty
+    /// domain; everything in the app uses `shared`.
+    init(defaults: UserDefaults = .standard) {
+        d = defaults
         minAgeHours = d.object(forKey: "minAgeHours") as? Double ?? 24
         securityMinAgeHours = d.object(forKey: "securityMinAgeHours") as? Double ?? 4
         checkIntervalHours = d.object(forKey: "checkIntervalHours") as? Double ?? 6

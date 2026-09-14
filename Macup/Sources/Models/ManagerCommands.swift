@@ -41,10 +41,39 @@ extension Manager {
 
     /// Why this manager's commands cannot be edited, for the UI to show instead of an editor.
     var notEditableReason: String? {
-        runsElevated
-            ? "These can run with an administrator password, and MacUp never elevates a command that came "
-                + "from a setting."
-            : nil
+        guard runsElevated else { return nil }
+        return "\(title) asks for an administrator password to change anything, and MacUp will not run a "
+            + "command as root that came from a setting — only the program it names itself. You can see "
+            + "exactly what it runs, but not replace it."
+    }
+
+    /// Why a phase has no one command, so the app can say so rather than leave a gap where an editor
+    /// would be. Returns nil when there is a command, which is the ordinary case.
+    func noCommandReason(_ phase: CommandPhase) -> String? {
+        switch phase {
+        case .check:
+            switch self {
+            case .go:
+                return "Go has no command that lists outdated programs. MacUp reads the module recorded "
+                    + "inside each binary in GOBIN and asks the module proxy what is newer."
+            case .tools:
+                return "These tools share no command. MacUp asks each one its version, and GitHub for its "
+                    + "latest release."
+            default: return nil
+            }
+        case .update:
+            return self == .tools
+                ? "Each tool updates itself its own way, with its installer as a fallback, so there is no "
+                    + "one command to show."
+                : nil
+        case .updateAll:
+            return "MacUp updates \(title) one package at a time, so there is no all-at-once command."
+        case .remove:
+            return supportsRemoval
+                ? nil
+                : "MacUp does not uninstall these. A toolchain, an App Store app or a tool that manages "
+                    + "itself is left to the thing that installed it."
+        }
     }
 }
 
@@ -87,5 +116,25 @@ struct CommandBook: Equatable {
     /// The environment key a replacement travels in, matching what the scripts look up.
     static func key(_ phase: CommandPhase, _ manager: Manager) -> String {
         "MACUP_CMD_" + storeKey(phase, manager)
+    }
+}
+
+/// What comes back from trying a check command out.
+enum CommandTest {
+    /// The verdict on a test run, kept out of the view so it can be checked without drawing anything.
+    ///
+    /// The awkward case is the middle one: the command ran, exited cleanly, and nothing was understood.
+    /// That is either an up-to-date machine or a command printing something MacUp cannot read, and from
+    /// here the two look identical — so it says both rather than picking one and being wrong.
+    static func message(for scan: ScanResult, manager: Manager) -> String {
+        if let report = scan.reports.first(where: { $0.manager == manager }), report.status == .error {
+            return "✗ \(report.message)"
+        }
+        if scan.packages.isEmpty {
+            return "✓ ran, but nothing was understood. Either there is nothing to update, or the output "
+                + "is not in the shape MacUp reads."
+        }
+        let count = scan.packages.count
+        return "✓ understood \(count) package\(count == 1 ? "" : "s")"
     }
 }
