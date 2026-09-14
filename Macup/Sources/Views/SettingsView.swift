@@ -112,7 +112,9 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520)
+        // Resizable: the command rows are long lines of text, and how much room they need depends on
+        // the manager. A floor keeps the two-column rows from collapsing.
+        .frame(minWidth: 520, idealWidth: 640, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
         .onChange(of: settings.disabledManagers) { _, _ in Task { await store.scan() } }
         .onChange(of: settings.brewGreedy) { _, _ in Task { await store.scan(managers: [.brew]) } }
         .onChange(of: settings.checkIntervalHours) { _, _ in store.restartSchedule() }

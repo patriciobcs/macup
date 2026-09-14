@@ -8,9 +8,11 @@ struct ManagerCommandsView: View {
     @State private var catalog = CommandCatalog.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             if let reason = manager.notEditableReason {
-                Label(reason, systemImage: "lock").font(.caption).foregroundStyle(.secondary)
+                Label(reason, systemImage: "lock")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             // Every phase is listed, whether or not there is a command behind it: a row that simply
             // vanished would leave the reason to guesswork.
@@ -22,10 +24,27 @@ struct ManagerCommandsView: View {
                         Text(phase.title).font(.caption.bold()).foregroundStyle(.secondary)
                         Text(reason).font(.caption2).foregroundStyle(.secondary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            let used = CommandPlaceholder.used(
+                in: CommandPhase.allCases.compactMap { catalog.command($0, manager, settings: settings) }
+                    .filter { !$0.isEmpty })
+            if !used.isEmpty {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(used, id: \.name) { placeholder in
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            Text("{\(placeholder.name)}").font(.caption2.monospaced())
+                            Text(placeholder.meaning).font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.top, 2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
         .task { await catalog.loadIfNeeded() }
     }
 }
@@ -46,15 +65,26 @@ private struct CommandField: View {
     private var changed: Bool { catalog.isChanged(phase, manager, settings: settings) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        // Wrapped so the Form sees one block: left to itself it takes the title for a row label, puts
+        // the field in a trailing column and sizes it to its text, which is how a command ends up
+        // squeezed against the right edge.
+        HStack(spacing: 0) {
+            content
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 Text(phase.title).font(.caption.bold())
-                if changed { Text("changed").font(.caption2).foregroundStyle(.orange) }
-                Spacer()
-                if editable, phase == .check {
-                    Button(testing ? "Testing…" : "Test") { Task { await test() } }
-                        .controlSize(.small).disabled(testing)
+                if changed {
+                    Text("changed")
+                        .font(.caption2).foregroundStyle(.orange)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill(Color.orange.opacity(0.15)))
                 }
+                Spacer()
                 if editable, changed {
                     Button("Reset") {
                         catalog.setCommand("", phase, manager, settings: settings)
@@ -63,12 +93,23 @@ private struct CommandField: View {
                     }
                     .controlSize(.small)
                 }
+                if editable, phase == .check {
+                    Button(testing ? "Testing…" : "Test") { Task { await test() } }
+                        .controlSize(.small).disabled(testing)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if editable {
                 // One line, not a growing field: a command is a command line, and a field that resizes
                 // itself as the text changes can put AppKit into a constraint loop.
                 TextField("", text: $text)
                     .font(.caption.monospaced()).textFieldStyle(.roundedBorder)
+                    // labelsHidden, or the Form keeps a label column for the field's empty label and
+                    // puts the field itself in the trailing column, sized to its text — which is how a
+                    // command ends up squeezed against the right edge instead of filling the row.
+                    .labelsHidden()
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     // Saved as it is typed rather than on the way out: writing to preferences from
                     // onDisappear changes an observed object while the window is being torn down,
                     // which invalidates views in the middle of a layout pass.
@@ -79,16 +120,20 @@ private struct CommandField: View {
             } else {
                 Text(catalog.command(phase, manager, settings: settings))
                     .font(.caption.monospaced()).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(6)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.05)))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 7).padding(.vertical, 5)
+                    .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.06)))
             }
-            if let note = phase.note, editable {
+            if let note = phase.note, editable, changed {
                 Text(note).font(.caption2).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let result {
                 Text(result).font(.caption2).foregroundStyle(result.hasPrefix("✓") ? .green : .orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { text = catalog.command(phase, manager, settings: settings) }
     }
 

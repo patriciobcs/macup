@@ -91,6 +91,33 @@ final class ManagerCommandsTests: XCTestCase {
         XCTAssertNil(CommandPhase.remove.note)
     }
 
+    func testOnlyThePlaceholdersAManagerUsesAreExplained() {
+        // The legend under a manager's commands is about that manager. Listing all seven everywhere
+        // would be noise, and would suggest a command takes something it does not.
+        let brew = CommandPlaceholder.used(in: [
+            "brew outdated --json=v2 {greedy}", "brew upgrade {greedy} {kind} -- {name}",
+        ])
+        XCTAssertEqual(brew.map(\.name), ["name", "greedy", "kind"], "in a fixed order, not reshuffled")
+
+        XCTAssertEqual(CommandPlaceholder.used(in: ["npm update -g"]).map(\.name), [])
+        XCTAssertEqual(
+            CommandPlaceholder.used(in: ["{python} install --upgrade {user} {name}"]).map(\.name),
+            ["name", "python", "user"])
+    }
+
+    func testEveryPlaceholderInTheRealCommandsHasAMeaning() throws {
+        // A placeholder nobody explained reads as a typo in the command.
+        let book = try Self.realBook()
+        let commands = book.byManager.values.flatMap { $0.defaults.values }
+        let known = Set(CommandPlaceholder.meanings.map(\.name))
+        for command in commands {
+            for part in command.components(separatedBy: "{").dropFirst() {
+                let name = String(part.prefix(while: { $0 != "}" }))
+                XCTAssertTrue(known.contains(name), "{\(name)} in \"\(command)\" has no explanation")
+            }
+        }
+    }
+
     func testCommandsThatCanRunAsRootAreNotEditable() {
         // MacUp never elevates a command that came from a setting, so those are shown, not offered.
         XCTAssertNotNil(Manager.port.notEditableReason)

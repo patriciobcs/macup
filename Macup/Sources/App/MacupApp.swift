@@ -33,6 +33,8 @@ struct MacupApp: App {
                 .environment(store)
                 .environment(settings)
         }
+        .defaultSize(width: 640, height: 620)
+        .windowResizability(.contentMinSize)
     }
 }
 

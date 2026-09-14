@@ -138,3 +138,25 @@ enum CommandTest {
         return "✓ understood \(count) package\(count == 1 ? "" : "s")"
     }
 }
+
+/// The {placeholders} in a command, and what each stands for.
+///
+/// They are filled in when the command runs — a name always shell-quoted, so that a package called
+/// "evil; rm -rf ~" stays one argument. Someone reading a command in Settings needs to know what they
+/// are, and someone editing one needs to keep them.
+enum CommandPlaceholder {
+    static let meanings: [(name: String, meaning: String)] = [
+        ("name", "one package"),
+        ("names", "every package being updated"),
+        ("python", "the python the scan settled on"),
+        ("greedy", "--greedy, when that preference is on"),
+        ("kind", "--cask or --formula"),
+        ("user", "--user, for a package pip put in the user site"),
+        ("gobin", "where go install puts programs"),
+    ]
+
+    /// Only the ones these commands actually use, in a fixed order so the line does not reshuffle.
+    static func used(in commands: [String]) -> [(name: String, meaning: String)] {
+        meanings.filter { placeholder in commands.contains { $0.contains("{\(placeholder.name)}") } }
+    }
+}
