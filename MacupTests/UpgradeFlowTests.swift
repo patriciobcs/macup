@@ -79,6 +79,35 @@ final class UpgradeFlowTests: StubScriptCase {
         XCTAssertFalse(store.isUpgradingAnything)
     }
 
+    func testNothingIsConfirmedWhenNobodyIsThereToConfirmIt() {
+        // The confirmation is a modal. In a test or a render there is nobody to answer it, and one put
+        // on screen would wait for ever rather than fail, so it answers no and nothing is removed.
+        XCTAssertTrue(AutomatedRun.isActive)
+        XCTAssertFalse(UpdateStore.confirmRemoval(of: pkg("lodash")))
+    }
+
+    func testTheRunningVersionIsKnown() {
+        // It is shown in the panel and compared against the cask when MacUp updates itself.
+        let store = store()
+        XCTAssertFalse(store.appVersion.isEmpty)
+        XCTAssertNotEqual(store.appVersion, "?", "read from the bundle, not the fallback")
+    }
+
+    func testEachManagerIsRecheckedAsItFinishesRatherThanAtTheEnd() async {
+        // Update All used to confirm everything in one scan after the last manager, so twenty packages
+        // sat in the list looking untouched until the whole batch was done. Each manager is rechecked
+        // as it finishes, which is the progress someone watching the window is waiting to see.
+        let store = store()
+        store.loadFixture(
+            reports: [], packages: [pkg("lodash", manager: .npm), pkg("ripgrep", manager: .cargo)], log: "")
+
+        await store.upgradeAllEligible()
+
+        XCTAssertEqual(
+            scanCalls(), ["npm", "cargo"],
+            "one scan per manager, in the order they ran — not a single scan of both at the end")
+    }
+
     func testUpdateAllLeavesMacOSUpdatesAlone() async {
         let store = store()
         store.loadFixture(reports: [], packages: [pkg("lodash"), pkg("Sequoia", manager: .macos)], log: "")
@@ -410,7 +439,7 @@ final class UpgradeFlowTests: StubScriptCase {
         let store = store()
         XCTAssertEqual(store.history.records, [])
         renderOffscreen(
-            HistoryView(tab: .constant(1)).environment(store).environment(settings),
+            HistoryView().environment(store).environment(settings),
             size: CGSize(width: 470, height: 400))
     }
 

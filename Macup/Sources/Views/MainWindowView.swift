@@ -8,7 +8,7 @@ struct MainWindowView: View {
         HSplitView {
             UpdatesView()
                 .frame(minWidth: 340, idealWidth: 400, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            RightPane()
+            HistoryView()
                 .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .toolbar {
@@ -17,60 +17,151 @@ struct MainWindowView: View {
     }
 }
 
-/// Output log or action history, switched with a segmented control.
-struct RightPane: View {
-    @Environment(UpdateStore.self) private var store
-    @State private var tab = 0
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if tab == 0 { LogView(tab: $tab) } else { HistoryView(tab: $tab) }
-        }
-        // Jump to the output when an error is revealed from a row.
-        .onChange(of: store.revealCount) { _, _ in tab = 0 }
-    }
-}
-
-struct PaneSwitch: View {
-    @Binding var tab: Int
-    var body: some View {
-        Picker("", selection: $tab) {
-            Text("Output").tag(0)
-            Text("History").tag(1)
-        }
-        .pickerStyle(.segmented).labelsHidden().frame(width: 150)
-    }
-}
-
+/// Everything MacUp has done, newest first, and whatever it is doing right now.
+///
+/// There used to be a separate output pane. What a command printed is kept with the action it belongs
+/// to, so a second place to look at the same text only made the window harder to navigate.
 struct HistoryView: View {
     @Environment(UpdateStore.self) private var store
-    @Binding var tab: Int
+    @State private var expanded: Set<UUID> = []
+    @State private var liveExpanded = false
+
+    /// Records grouped by day, so a long history can be scanned by when rather than by scrolling.
+    private var days: [(title: String, records: [ActionRecord])] {
+        let calendar = Calendar.current
+        var order: [Date] = []
+        var byDay: [Date: [ActionRecord]] = [:]
+        for record in store.history.records {
+            let day = calendar.startOfDay(for: record.date)
+            if byDay[day] == nil { order.append(day) }
+            byDay[day, default: []].append(record)
+        }
+        return order.map { (Self.dayTitle($0, calendar: calendar), byDay[$0] ?? []) }
+    }
+
+    private static func dayTitle(_ day: Date, calendar: Calendar) -> String {
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInYesterday(day) { return "Yesterday" }
+        return day.formatted(.dateTime.weekday(.wide).day().month(.wide))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                PaneSwitch(tab: $tab)
+                Text("History").font(.headline)
+                let failed = store.failures.count
+                if failed > 0 {
+                    Text("^[\(failed) failure](inflect: true)").font(.caption).foregroundStyle(.red)
+                }
                 Spacer()
-                Button("Clear") { store.history.clear() }.controlSize(.small).disabled(store.history.records.isEmpty)
+                Button("Clear") { store.history.clear() }
+                    .controlSize(.small).disabled(store.history.records.isEmpty)
             }
             .padding(.horizontal, 12).frame(height: 44)
             Divider()
-            if store.history.records.isEmpty {
-                Text("Updates, removals and ignores you perform will be listed here.")
-                    .foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            content
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if store.history.records.isEmpty && !store.isBusy {
+            Text("Updates, removals and ignores you perform will be listed here.")
+                .foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollViewReader { proxy in
                 List {
-                    ForEach(store.history.records) { HistoryRow(record: $0) }
+                    if store.isBusy {
+                        RunningRow(expanded: $liveExpanded)
+                    }
+                    ForEach(days, id: \.title) { day in
+                        Section(day.title) {
+                            ForEach(day.records) { record in
+                                HistoryRow(
+                                    record: record, expanded: expanded.contains(record.id),
+                                    toggle: { toggle(record) }
+                                )
+                                .id(record.id)
+                            }
+                        }
+                    }
                 }
                 .listStyle(.inset)
+                // "Show details" on a failed package opens that action here instead of jumping to a
+                // separate log, which is the reason the output pane is gone.
+                .onChange(of: store.revealCount) { _, _ in
+                    guard let target = store.revealTarget,
+                        let record = store.history.records.first(where: {
+                            "\($0.manager.rawValue):\($0.package)" == target
+                        })
+                    else {
+                        liveExpanded = store.isBusy
+                        return
+                    }
+                    expanded.insert(record.id)
+                    withAnimation { proxy.scrollTo(record.id, anchor: .center) }
+                }
             }
         }
+    }
+
+    private func toggle(_ record: ActionRecord) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            if expanded.contains(record.id) { expanded.remove(record.id) } else { expanded.insert(record.id) }
+        }
+    }
+}
+
+/// What MacUp is doing at this moment, with the live output behind it.
+struct RunningRow: View {
+    @Environment(UpdateStore.self) private var store
+    @Binding var expanded: Bool
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small).frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(store.activityTitle).font(.body)
+                    if let detail = store.activityDetail {
+                        Text(detail).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                if !store.log.isEmpty {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() } }
+            if expanded, !store.log.isEmpty {
+                HStack {
+                    Spacer()
+                    Button(copied ? "Copied" : "Copy") {
+                        Support.copy(store.log)
+                        copied = true
+                        Task {
+                            try? await Task.sleep(for: .seconds(1.5))
+                            copied = false
+                        }
+                    }
+                    .controlSize(.small)
+                }
+                LogTextView(text: store.log, revealMarker: store.revealMarker, revealCount: store.revealCount)
+                    .frame(height: 240)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 
 struct HistoryRow: View {
     let record: ActionRecord
-    @State private var showOutput = false
+    /// Held by the pane rather than the row, so "show details" elsewhere can open the right one.
+    let expanded: Bool
+    let toggle: () -> Void
 
     /// An empty string is the same as no output at all, so neither gets a disclosure arrow.
     private var output: String? {
@@ -81,7 +172,7 @@ struct HistoryRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             summary
-            if showOutput, let output {
+            if expanded, let output {
                 HStack(spacing: 8) {
                     Spacer()
                     Button("Copy Output") { Support.copy(output) }.controlSize(.small)
@@ -118,17 +209,16 @@ struct HistoryRow: View {
             }
             // Output is kept for a week, so older entries have nothing to show.
             if output != nil {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) { showOutput.toggle() }
-                } label: {
-                    Image(systemName: showOutput ? "chevron.down" : "chevron.right")
-                        .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                }
-                .buttonStyle(.borderless)
-                .help(showOutput ? "Hide what the command printed" : "Show what the command printed")
-                .accessibilityLabel(showOutput ? "Hide output" : "Show output")
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             }
         }
+        // The whole row, not just the arrow: a one-line target on the right edge is a poor thing to
+        // ask someone to hit when the row itself is what they are looking at.
+        .contentShape(Rectangle())
+        .onTapGesture { if output != nil { toggle() } }
+        .accessibilityAddTraits(output != nil ? .isButton : [])
+        .accessibilityLabel(expanded ? "Hide what the command printed" : "Show what the command printed")
     }
 
     private func firstLine(_ s: String) -> String { s.split(separator: "\n").first.map(String.init) ?? s }
@@ -140,39 +230,6 @@ struct HistoryRow: View {
         case .ignore: "eye.slash.circle.fill"
         case .unignore: "eye.circle.fill"
         case .install: record.succeeded ? "plus.circle.fill" : "xmark.circle.fill"
-        }
-    }
-}
-
-struct LogView: View {
-    @Environment(UpdateStore.self) private var store
-    @Binding var tab: Int
-    @State private var copied = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                PaneSwitch(tab: $tab)
-                let failed = store.failures.count
-                if failed > 0 {
-                    Text("\(failed) failed").font(.caption).foregroundStyle(.red)
-                }
-                Spacer()
-                Button(copied ? "Copied" : "Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(store.log, forType: .string)
-                    copied = true
-                    Task {
-                        try? await Task.sleep(for: .seconds(1.5))
-                        copied = false
-                    }
-                }
-                .controlSize(.small).disabled(store.log.isEmpty)
-                Button("Clear") { store.clearLog() }.controlSize(.small).disabled(store.log.isEmpty)
-            }
-            .padding(.horizontal, 12).frame(height: 44)
-            Divider()
-            LogTextView(text: store.log, revealMarker: store.revealMarker, revealCount: store.revealCount)
         }
     }
 }

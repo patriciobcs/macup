@@ -21,7 +21,7 @@ enum Screenshots {
                 HStack(spacing: 0) {
                     UpdatesView().frame(width: 430)
                     Divider()
-                    RightPane()
+                    HistoryView()
                 }.environment(store).environment(settings),
                 size: CGSize(width: 900, height: 540), dark: dark,
                 to: url.appendingPathComponent("window-\(suffix).png"))

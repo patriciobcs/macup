@@ -46,6 +46,29 @@ extension UpdateStore {
 
     var isUpgradingAnything: Bool { !upgrading.isEmpty }
 
+    /// Whether anything is happening that the history pane should be showing a row for.
+    var isBusy: Bool { isUpgradingAnything || isScanning || !installing.isEmpty }
+
+    /// Package ids currently being updated. `upgrading` also holds bare manager names, which are the
+    /// locks taken while a whole manager runs, not packages.
+    private var upgradingPackages: [String] {
+        let managers = Set(Manager.allCases.map(\.rawValue))
+        return upgrading.filter { !managers.contains($0) }.sorted()
+    }
+
+    /// One line for what MacUp is doing, for the row at the top of the history.
+    var activityTitle: String {
+        Activity.title(
+            packages: upgradingPackages, installing: installing,
+            managers: upgrading.compactMap(Manager.init(rawValue:)))
+    }
+
+    /// How far along, when there is a number worth showing.
+    var activityDetail: String? {
+        guard isScanning, scanTotal > 0 else { return nil }
+        return "\(scanned.count) of \(scanTotal) package managers checked"
+    }
+
     /// Managers that failed for reasons other than being offline: these deserve a report.
     var problems: [ManagerReport] { reports.filter { $0.status == .error && !$0.isOffline } }
 

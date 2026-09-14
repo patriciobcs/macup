@@ -387,3 +387,43 @@ final class PreferencesRoundTripTests: XCTestCase {
         XCTAssertEqual(settings.threshold(for: pkg), 4 * 3600)
     }
 }
+
+/// The one line that says what MacUp is doing, at the top of the history.
+final class ActivityTitleTests: XCTestCase {
+    func testOnePackageIsNamed() {
+        XCTAssertEqual(
+            Activity.title(packages: ["npm:lodash"], installing: [], managers: []), "Updating lodash")
+    }
+
+    func testSeveralPackagesNameOneAndCountTheRest() {
+        XCTAssertEqual(
+            Activity.title(packages: ["npm:lodash", "npm:vite", "brew:jq"], installing: [], managers: []),
+            "Updating jq and 2 more")
+    }
+
+    func testAGoImportPathKeepsItsColons() {
+        // Ids are "manager:name" and a Go package's name is an import path with colons of its own.
+        XCTAssertEqual(
+            Activity.title(packages: ["go:golang.org/x/tools/cmd/goimports"], installing: [], managers: []),
+            "Updating golang.org/x/tools/cmd/goimports")
+    }
+
+    func testInstallingAToolIsSaidPlainly() {
+        XCTAssertEqual(
+            Activity.title(packages: [], installing: [.mas], managers: []), "Installing App Store (mas)")
+    }
+
+    func testAWholeManagerRunningIsNamedByTheManager() {
+        XCTAssertEqual(
+            Activity.title(packages: [], installing: [], managers: [.brew]), "Updating Homebrew")
+    }
+
+    func testAPackageIsMoreSpecificThanTheManagerItBelongsTo() {
+        XCTAssertEqual(
+            Activity.title(packages: ["brew:jq"], installing: [], managers: [.brew]), "Updating jq")
+    }
+
+    func testWithNothingRunningItIsTheScan() {
+        XCTAssertEqual(Activity.title(packages: [], installing: [], managers: []), "Checking for updates")
+    }
+}

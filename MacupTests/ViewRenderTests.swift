@@ -66,7 +66,7 @@ final class ViewRenderTests: XCTestCase {
         let store = UpdateStore(persist: false)
         store.loadFixture(reports: [], packages: [], log: "")
         renderOffscreen(UpdatesView().environment(store).environment(settings), size: CGSize(width: 430, height: 600))
-        renderOffscreen(RightPane().environment(store).environment(settings), size: CGSize(width: 470, height: 600))
+        renderOffscreen(HistoryView().environment(store).environment(settings), size: CGSize(width: 470, height: 600))
     }
 
     func testSettingsWithManagersDiscoveredAndMissing() {
@@ -112,9 +112,9 @@ final class ViewRenderTests: XCTestCase {
     func testTheLogAndHistoryPanesWithContent() {
         let store = busyStore()
         renderOffscreen(
-            LogView(tab: .constant(0)).environment(store).environment(settings), size: CGSize(width: 470, height: 560))
+            HistoryView().environment(store).environment(settings), size: CGSize(width: 470, height: 560))
         renderOffscreen(
-            HistoryView(tab: .constant(1)).environment(store).environment(settings),
+            HistoryView().environment(store).environment(settings),
             size: CGSize(width: 470, height: 560))
     }
 

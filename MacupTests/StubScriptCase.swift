@@ -74,6 +74,8 @@ class StubScriptCase: XCTestCase {
             # caches the login shell's variables for the life of the process, so anything set here
             # would leak into every later test.
             here=${0:A:h}
+            # Every call is recorded, so a test can tell one scan of everything from a scan per manager.
+            print -r -- "$*" >> "$here/scan-calls"
             admin=$(cat "$here/admin" 2>/dev/null)
             for m in "$@"; do
               if [[ "$m" == "$admin" ]]; then printf 'M\t%s\tok\tadmin\n' "$m"
@@ -127,6 +129,13 @@ class StubScriptCase: XCTestCase {
     /// The scan reports an outdated rustup toolchain, which carries its own date and so needs no registry.
     func reportOutdatedToolchain() throws {
         try "".write(to: directory.appendingPathComponent("outdated-rustup"), atomically: true, encoding: .utf8)
+    }
+
+    /// What the scan was asked to check, one line per call, in order.
+    func scanCalls() -> [String] {
+        let url = directory.appendingPathComponent("scan-calls")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return text.split(separator: "\n").map(String.init)
     }
 
     /// The scan reports this manager as needing an administrator password.

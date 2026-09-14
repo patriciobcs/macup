@@ -22,6 +22,8 @@ final class UpdateStore {
     private(set) var failures: [String: String] = [:]
     /// Log section the window should scroll to; the counter makes repeated reveals of the same section fire.
     private(set) var revealMarker: String?
+    /// The package "show details" was asked about, so the history can open that action.
+    private(set) var revealTarget: String?
     private(set) var revealCount = 0
     private(set) var installing: Set<Manager> = []
     /// Managers that have reported during the scan in flight, and how many were asked for. The setup
@@ -262,14 +264,13 @@ final class UpdateStore {
     /// Upgrades one package at a time so each row gets its own result, then rescans once.
     private func upgradeAll(managers: [Manager]) async {
         let grouped = Dictionary(grouping: eligible, by: \.manager)
-        var touched: [Manager] = []
         for manager in managers where !(manager.opensExternally && managers.count > 1) {
             guard let items = grouped[manager], !upgrading.contains(manager.rawValue) else { continue }
-            touched.append(manager)
             upgrading.insert(manager.rawValue)
             defer { upgrading.remove(manager.rawValue) }
             if manager == .rustup {
                 await runUpgrade(manager: manager, packages: items)
+                await rescanAfterUpgrade(manager)
                 continue
             }
             // npm must upgrade itself last, after the packages installed through it.
@@ -279,8 +280,8 @@ final class UpdateStore {
                 await runUpgrade(manager: manager, packages: [item])
                 upgrading.remove(item.id)
             }
+            await rescanAfterUpgrade(manager)
         }
-        if !touched.isEmpty { await scan(managers: touched) }
         // MacUp updates itself last: a Homebrew upgrade relaunches the app, which would cut the rest of
         // the batch short, and Sparkle takes over the window once it starts.
     }
@@ -323,6 +324,15 @@ final class UpdateStore {
         // an unattended run must never put a password prompt on screen out of nowhere.
         await upgradeAll(managers: Manager.allCases.filter { !needsAdmin($0) })
         await updateSelf(unattended: true)
+    }
+
+    /// Confirms what one manager has left to do, as soon as it is done rather than once the whole batch
+    /// is. Updating twenty packages used to leave every one of them on the list until the last manager
+    /// finished; now each manager's packages leave as it completes, which is the progress being watched.
+    private func rescanAfterUpgrade(_ manager: Manager) async {
+        upgrading.remove(manager.rawValue)
+        await scan(managers: [manager])
+        upgrading.insert(manager.rawValue)
     }
 
     /// Runs the upgrade script once. Callers manage the `upgrading` set and the rescan.
@@ -448,6 +458,7 @@ final class UpdateStore {
     /// Ask the window's log view to scroll to this package's most recent upgrade output.
     func reveal(_ pkg: OutdatedPackage) {
         revealMarker = Self.logMarker(manager: pkg.manager, names: [pkg.name])
+        revealTarget = pkg.id
         revealCount += 1
     }
 

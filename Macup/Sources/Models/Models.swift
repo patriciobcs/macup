@@ -161,3 +161,25 @@ struct ScanResult: Equatable {
     var packages: [OutdatedPackage] = []
     var tools: [ToolReport] = []
 }
+
+/// What MacUp is doing at this moment, in one line.
+///
+/// Kept apart from the store so every case can be checked without arranging for real work to be in
+/// flight: a tool installing, a whole manager running, one package, several at once, or nothing but a
+/// scan.
+enum Activity {
+    static func title(packages: [String], installing: Set<Manager>, managers: [Manager]) -> String {
+        if let id = packages.min() {
+            // Package ids are "manager:name"; a name may itself contain a colon (a Go import path).
+            let name = id.split(separator: ":").dropFirst().joined(separator: ":")
+            return packages.count > 1 ? "Updating \(name) and \(packages.count - 1) more" : "Updating \(name)"
+        }
+        if let manager = installing.min(by: { $0.rawValue < $1.rawValue }) {
+            return "Installing \(manager.title)"
+        }
+        if let manager = managers.min(by: { $0.rawValue < $1.rawValue }) {
+            return "Updating \(manager.title)"
+        }
+        return "Checking for updates"
+    }
+}

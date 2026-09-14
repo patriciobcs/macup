@@ -171,6 +171,9 @@ struct MenuBarPanel: View {
                     Text("\(store.discoveredManagers.count) package managers checked").font(.caption).foregroundStyle(
                         .secondary)
                 }
+                // Without this the row is only as wide as its text and sits centred, out of line with
+                // every other row in the panel.
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 14).padding(.vertical, 8)
         }
