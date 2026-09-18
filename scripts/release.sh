@@ -140,6 +140,6 @@ git -C "$OUT/tap" commit -q -m "macup $VERSION" || true
 git -C "$OUT/tap" push -q
 
 # Fetch the tag GitHub created for the exact source; never force or silently ignore a conflicting tag.
-git fetch origin "refs/tags/v$VERSION:refs/tags/v$VERSION"
+git fetch origin tag "v$VERSION"
 [[ "$(git rev-parse "v$VERSION^{commit}")" == "$SOURCE_COMMIT" ]]
 echo "Released MacUp $VERSION (build $BUILD): GitHub release v$VERSION (dmg, zip, appcast) and Homebrew tap updated."

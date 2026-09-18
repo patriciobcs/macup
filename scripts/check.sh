@@ -11,6 +11,7 @@ step "script syntax"
 while IFS= read -r -d '' script; do zsh -n "$script"; done < <(find Macup/Resources/Scripts tests scripts -name '*.sh' -print0)
 step "scan script"; tests/scan/test.sh
 step "upgrade script"; tests/upgrade/test.sh
+step "release tag"; tests/release/test.sh
 step "xcodegen";     xcodegen generate >/dev/null
 # build/ is ignored, so it does not exist in a fresh clone and tee has nowhere to write the log.
 mkdir -p build

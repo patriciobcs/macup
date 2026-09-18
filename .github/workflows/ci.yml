@@ -48,6 +48,7 @@ jobs:
               - 'MacupTests/**'
               - 'tests/scan/**'
               - 'tests/upgrade/**'
+              - 'tests/release/**'
               - 'project.yml'
               - 'scripts/**'
               - '.swift-format'
