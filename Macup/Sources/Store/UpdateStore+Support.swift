@@ -75,6 +75,9 @@ extension UpdateStore {
     /// At least one manager could not reach the network in the last scan.
     var isOffline: Bool { reports.contains { $0.isOffline } }
 
+    /// An empty package list is only reassuring when the scan itself succeeded.
+    var hasScanProblems: Bool { scanError != nil || isOffline || !problems.isEmpty }
+
     /// Managers that were found on this Mac (anything except "missing").
     var discoveredManagers: [Manager] { reports.filter { $0.status != .missing }.map(\.manager) }
 

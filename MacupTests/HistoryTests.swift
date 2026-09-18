@@ -32,6 +32,19 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(reopened.records.first?.kind, .remove)
     }
 
+    func testHistoryFromBeforePackageIDsStillOpens() throws {
+        let old = ActionRecord(
+            kind: .upgrade, manager: .brew, package: "jq", detail: "failed", succeeded: false, output: "Error: old run")
+        let data = try JSONEncoder.iso.encode([old])
+        XCTAssertFalse(try XCTUnwrap(String(data: data, encoding: .utf8)).contains("packageID"))
+        try data.write(to: directory.appendingPathComponent("history.json"))
+
+        let history = History(directory: directory)
+        XCTAssertEqual(history.latestRecord(for: "brew:formula:jq")?.id, old.id)
+        XCTAssertNil(history.latestRecord(for: "npm:jq"))
+        XCTAssertNil(history.latestRecord(for: "brew:formula:other"))
+    }
+
     func testClearingEmptiesTheFileToo() {
         let history = History(directory: directory)
         history.add(record(.upgrade, "gone"))

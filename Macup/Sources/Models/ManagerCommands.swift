@@ -11,6 +11,10 @@ enum CommandPhase: String, CaseIterable, Codable, Identifiable, Hashable {
     case updateAll = "update_all"
     case remove
 
+    /// The app always updates named, eligible packages; the scripts' no-argument update_all commands
+    /// are only for standalone use and must not be offered as app settings.
+    static let appPhases: [CommandPhase] = [.check, .update, .remove]
+
     var id: String { rawValue }
 
     var title: String {

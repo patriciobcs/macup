@@ -23,6 +23,13 @@ final class ManagerCommandsTests: XCTestCase {
         XCTAssertEqual(book[.npm].phases, [.check, .update, .updateAll, .remove])
     }
 
+    func testAppSettingsExcludeStandaloneUpdateAllCommands() throws {
+        let book = try Self.realBook()
+        XCTAssertNotNil(book[.npm].defaults[.updateAll], "the standalone script still supports updating everything")
+        XCTAssertFalse(CommandPhase.appPhases.contains(.updateAll), "the app never runs the no-argument command")
+        XCTAssertTrue(CommandPhase.appPhases.contains(.update), "Update All uses the named-package command")
+    }
+
     func testAManagerShowsOnlyThePhasesItHasACommandFor() {
         // Brew's removal is there in the real table; in this sample it is not, and nothing is invented.
         let book = CommandBook(commandLines: sample)

@@ -97,7 +97,7 @@ final class UpdateStore {
         history.add(
             ActionRecord(
                 kind: .ignore, manager: pkg.manager, package: pkg.name, detail: "\(pkg.installed) → \(pkg.latest)",
-                succeeded: true))
+                succeeded: true, packageID: pkg.id))
     }
 
     func unignore(id: String) {
@@ -330,9 +330,9 @@ final class UpdateStore {
     /// is. Updating twenty packages used to leave every one of them on the list until the last manager
     /// finished; now each manager's packages leave as it completes, which is the progress being watched.
     private func rescanAfterUpgrade(_ manager: Manager) async {
-        upgrading.remove(manager.rawValue)
+        // Keep the manager locked until its rescan finishes. Otherwise scan() can start an automatic
+        // batch in the middle of this batch and update the remaining packages a second time.
         await scan(managers: [manager])
-        upgrading.insert(manager.rawValue)
     }
 
     /// Runs the upgrade script once. Callers manage the `upgrading` set and the rescan.
@@ -369,7 +369,7 @@ final class UpdateStore {
                     detail: failure ?? "\(item.installed) → \(item.latest)", succeeded: failure == nil,
                     // One command covered them all, so the output hangs off the first row rather than
                     // being stored once per package.
-                    output: index == 0 ? output : nil)
+                    output: index == 0 ? output : nil, packageID: item.id)
             })
     }
 
@@ -402,7 +402,7 @@ final class UpdateStore {
         history.add(
             ActionRecord(
                 kind: .remove, manager: pkg.manager, package: pkg.name,
-                detail: failure ?? pkg.installed, succeeded: failure == nil, output: output))
+                detail: failure ?? pkg.installed, succeeded: failure == nil, output: output, packageID: pkg.id))
         await scan(managers: [pkg.manager])
     }
 

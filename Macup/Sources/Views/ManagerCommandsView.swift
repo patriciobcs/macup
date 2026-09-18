@@ -16,7 +16,7 @@ struct ManagerCommandsView: View {
             }
             // Every phase is listed, whether or not there is a command behind it: a row that simply
             // vanished would leave the reason to guesswork.
-            ForEach(CommandPhase.allCases) { phase in
+            ForEach(CommandPhase.appPhases) { phase in
                 if catalog.book[manager].defaults[phase] != nil {
                     CommandField(manager: manager, phase: phase)
                 } else if let reason = manager.noCommandReason(phase) {
@@ -28,7 +28,7 @@ struct ManagerCommandsView: View {
                 }
             }
             let used = CommandPlaceholder.used(
-                in: CommandPhase.allCases.compactMap { catalog.command($0, manager, settings: settings) }
+                in: CommandPhase.appPhases.compactMap { catalog.command($0, manager, settings: settings) }
                     .filter { !$0.isEmpty })
             if !used.isEmpty {
                 VStack(alignment: .leading, spacing: 1) {
@@ -42,6 +42,8 @@ struct ManagerCommandsView: View {
                 .padding(.top, 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            Text("Update All uses the package update command for eligible packages.")
+                .font(.caption2).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)

@@ -90,9 +90,7 @@ struct HistoryView: View {
                 // separate log, which is the reason the output pane is gone.
                 .onChange(of: store.revealCount) { _, _ in
                     guard let target = store.revealTarget,
-                        let record = store.history.records.first(where: {
-                            "\($0.manager.rawValue):\($0.package)" == target
-                        })
+                        let record = store.history.latestRecord(for: target)
                     else {
                         liveExpanded = store.isBusy
                         return

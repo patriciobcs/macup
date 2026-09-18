@@ -16,6 +16,9 @@ struct ActionRecord: Identifiable, Codable, Equatable {
     /// What the command printed. Kept for a week so a failure can still be read afterwards, then
     /// dropped: the record of what happened is worth keeping, pages of build output are not.
     var output: String?
+    /// Includes the Homebrew kind, so a formula and a cask with the same name stay distinct.
+    /// Optional because records written by earlier versions did not store it.
+    var packageID: String?
 
     var title: String {
         switch kind {
@@ -96,6 +99,16 @@ final class History {
     func clear() {
         records = []
         save()
+    }
+
+    func latestRecord(for packageID: String) -> ActionRecord? {
+        records.first { record in
+            if let savedID = record.packageID { return savedID == packageID }
+            // Older Homebrew records have no kind; their manager and name are the best available match.
+            let parts = packageID.split(separator: ":", maxSplits: 2).map(String.init)
+            let legacyID = parts.count == 3 && parts[0] == "brew" ? "brew:\(parts[2])" : packageID
+            return "\(record.manager.rawValue):\(record.package)" == legacyID
+        }
     }
 
     private func save() {

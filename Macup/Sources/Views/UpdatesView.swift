@@ -38,6 +38,7 @@ struct UpdatesView: View {
     private var title: String {
         if store.isScanning && store.packages.isEmpty { return "Checking for updates…" }
         let n = store.badgeCount
+        if n == 0 && store.hasScanProblems { return "Could not check all updates" }
         if n == 0 { return "Everything is up to date" }
         return "\(n) update\(n == 1 ? "" : "s") ready"
     }
@@ -47,7 +48,7 @@ struct UpdatesView: View {
     @ViewBuilder private var content: some View {
         let eligible = store.eligible
         let waiting = store.waiting
-        if eligible.isEmpty && waiting.isEmpty && !store.isScanning {
+        if eligible.isEmpty && waiting.isEmpty && !store.isScanning && !store.hasScanProblems {
             emptyState
         } else {
             ScrollView {
