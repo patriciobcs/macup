@@ -59,7 +59,9 @@ final class ReleaseReadinessTests: StubScriptCase {
         await subject.scan(managers: [.npm])
 
         let text = try renderedText(subject)
-        XCTAssertTrue(text.contains("missing from bundle"), text)
+        // OCR can confuse the small connecting words at the runner's display scale. Assert the
+        // diagnostic itself: the script is named and reported missing, not merely a generic heading.
+        XCTAssertTrue(text.contains("macup-scan.sh") && text.contains("missing"), text)
         XCTAssertFalse(text.contains("are up to date"), text)
     }
 
