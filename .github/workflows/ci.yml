@@ -101,6 +101,7 @@ jobs:
           path: |
             build/check.log
             build/build.log
+            build/Logs/Test/*.xcresult
           if-no-files-found: ignore
 
   site:

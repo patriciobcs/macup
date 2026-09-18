@@ -90,9 +90,13 @@ final class ReleaseReadinessTests: StubScriptCase {
     private func renderedText(_ subject: UpdateStore) throws -> String {
         let bitmap = try XCTUnwrap(
             renderBitmap(
-                UpdatesView().environment(subject).environment(settings),
+                UpdatesView().environment(subject).environment(settings)
+                    .environment(\.colorScheme, .light).background(Color.white),
                 size: CGSize(width: 800, height: 600)))
         let image = try XCTUnwrap(bitmap.cgImage)
+        let attachment = XCTAttachment(image: NSImage(cgImage: image, size: .zero))
+        attachment.name = "Rendered update notices"
+        add(attachment)
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["en-US"]
