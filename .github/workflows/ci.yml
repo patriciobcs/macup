@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      macos_integration:
+        description: Run real package upgrades and removals on a disposable macOS runner
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,8 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 # Standard GitHub-hosted runners, macOS included, are free on public repositories, so the app is built
-# and tested here. The macOS package-manager integration in tests/macos still runs by hand: it installs
-# every manager and changes real packages.
+# and tested here. Real macOS package upgrades run only on an explicitly requested disposable runner.
 jobs:
   changes:
     name: What changed
@@ -27,6 +32,7 @@ jobs:
     outputs:
       scripts: ${{ steps.filter.outputs.scripts }}
       app: ${{ steps.filter.outputs.app }}
+      site: ${{ steps.filter.outputs.site }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -47,11 +53,14 @@ jobs:
               - '.swift-format'
               - '.swiftlint.yml'
               - '.github/workflows/ci.yml'
+            site:
+              - 'site/**'
+              - '.github/workflows/ci.yml'
 
   scripts-linux:
     name: Package manager integrations (Linux)
     needs: changes
-    if: needs.changes.outputs.scripts == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.scripts == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -68,7 +77,7 @@ jobs:
   app:
     name: Build and test (macOS)
     needs: changes
-    if: needs.changes.outputs.app == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.app == 'true'
     runs-on: macos-26
     timeout-minutes: 30
     steps:
@@ -93,3 +102,34 @@ jobs:
             build/check.log
             build/build.log
           if-no-files-found: ignore
+
+  site:
+    name: Website checks and build
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Check and build
+        working-directory: site
+        run: npm ci && npm run check && npm run build
+
+  macos-integration:
+    name: Real package upgrades (macOS)
+    if: github.event_name == 'workflow_dispatch' && inputs.macos_integration
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare disposable runner
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: tests/macos/setup.sh
+      - name: Scan, upgrade, remove and rescan
+        run: tests/macos/run-tests.sh

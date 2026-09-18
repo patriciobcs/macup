@@ -7,7 +7,8 @@ step() { print -P "%F{blue}==>%f $1"; }
 
 step "swift-format"; swift format lint --strict --recursive Macup/Sources MacupTests
 step "swiftlint";    swiftlint --strict --quiet
-step "script syntax"; find Macup/Resources/Scripts tests scripts -name '*.sh' -exec zsh -n {} \;
+step "script syntax"
+while IFS= read -r -d '' script; do zsh -n "$script"; done < <(find Macup/Resources/Scripts tests scripts -name '*.sh' -print0)
 step "scan script"; tests/scan/test.sh
 step "upgrade script"; tests/upgrade/test.sh
 step "xcodegen";     xcodegen generate >/dev/null
@@ -21,6 +22,9 @@ step "build"
 xcodebuild "${xcode[@]}" build 2>&1 | tee build/build.log | grep --line-buffered -E "error:|BUILD" || true
 grep -q "BUILD SUCCEEDED" build/build.log
 step "unit tests"
+# Do not merge a previous run's coverage when this checkout already has build products.
+rm -rf build/Build/ProfileData
+rm -f build/render.profraw
 # A test that hangs fails with its own name after two minutes instead of sitting there until the CI
 # job is killed, which says nothing about which test it was.
 xcodebuild "${xcode[@]}" test -test-timeouts-enabled YES \

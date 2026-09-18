@@ -1,6 +1,5 @@
-# Coverage comes from the Swift unit tests, which need macOS. CI does not run macOS runners, so
-# scripts/check.sh produces and uploads the report from a maintainer's machine (see CONTRIBUTING.md).
-# Statuses are informational: a report is not attached to every commit, so it must never block a PR.
+# The macOS CI job runs scripts/check.sh and uploads unit and rendered-view coverage.
+# Coverage statuses are informational; the build and tests themselves must pass.
 coverage:
   status:
     project:

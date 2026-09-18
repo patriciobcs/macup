@@ -32,7 +32,7 @@ Individually: `swift format --in-place --recursive Macup/Sources MacupTests` and
 - **Unit tests** cover the parsers, version comparison, eligibility rules, process handling and the store.
 - **Scan script.** `tests/scan/test.sh` drives `macup-scan.sh` with stub tools on the PATH, so it runs in seconds without depending on what is installed. It covers the behaviour around the managers rather than the managers themselves: results streaming out as each one finishes, a failing manager not taking the others with it, hung managers timing out, the version appearing in failure messages, and bun's fallback for older versions.
 - **Linux bench.** `tests/docker/test.sh` builds an Ubuntu image with 14 managers and packages pinned to old versions, then runs the scan and dry-run upgrades and removals. Needs Docker or a compatible runtime. CI runs it when the scripts change.
-- **macOS integration.** `tests/macos/` installs every manager on a disposable Mac or VM, pins old packages, performs real upgrades and removals, and verifies each by rescanning. It is not run in CI, since macOS runner minutes bill at ten times the rate. Do not run `tests/macos/setup.sh` on a Mac you care about.
+- **macOS integration.** `tests/macos/` installs every manager on a disposable Mac or VM, pins old packages, performs real upgrades and removals, and verifies each by rescanning. Run it through the CI workflow’s manual trigger with `macos_integration=true`; it installs and changes packages only on a disposable GitHub runner. Do not run `tests/macos/setup.sh` on a Mac you care about.
 
 ## Coverage
 
@@ -91,4 +91,12 @@ Maintainers only. One-time setup on the releasing Mac: a Developer ID Applicatio
 TEAM_ID=XXXXXXXXXX scripts/release.sh
 ```
 
-The script archives, signs, notarizes and staples, generates the signed Sparkle appcast, publishes the GitHub release with the dmg, zip and appcast, updates the cask in [patriciobcs/homebrew-tap](https://github.com/patriciobcs/homebrew-tap), and tags the source. Bump `MARKETING_VERSION` in `project.yml` first.
+Before releasing, push the source and run the full CI workflow with real macOS integration enabled:
+
+```sh
+gh workflow run ci.yml --ref main -f macos_integration=true
+```
+
+Wait for every job to pass. The release script requires a successful manual CI run, including real macOS package upgrades, for the exact commit being released. It rejects a dirty working tree, verifies both architectures, and renders the exported Release app before publication.
+
+The script archives, signs, notarizes and staples, generates the signed Sparkle appcast, publishes the GitHub release with the dmg, zip and appcast, updates the cask in [patriciobcs/homebrew-tap](https://github.com/patriciobcs/homebrew-tap), and verifies the release tag points at the tested source. Bump `MARKETING_VERSION` in `project.yml` first.
