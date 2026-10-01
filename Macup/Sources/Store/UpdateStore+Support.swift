@@ -70,7 +70,13 @@ extension UpdateStore {
     }
 
     /// Managers that failed for reasons other than being offline: these deserve a report.
-    var problems: [ManagerReport] { reports.filter { $0.status == .error && !$0.isOffline } }
+    /// A turned-off manager is left out, as `visible` leaves out its packages: it is no longer scanned,
+    /// so the error from its last scan would otherwise be reported for as long as it stays off.
+    var problems: [ManagerReport] {
+        reports.filter {
+            $0.status == .error && !$0.isOffline && !settings.disabledManagers.contains($0.manager)
+        }
+    }
 
     /// At least one manager could not reach the network in the last scan.
     var isOffline: Bool { reports.contains { $0.isOffline } }
