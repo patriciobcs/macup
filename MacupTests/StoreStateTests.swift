@@ -118,6 +118,21 @@ final class StoreStateTests: XCTestCase {
         XCTAssertTrue(store.isOffline)
     }
 
+    func testProblemsExcludeManagersThatAreTurnedOff() {
+        let saved = settings.disabledManagers
+        defer { settings.disabledManagers = saved }
+        settings.disabledManagers = [.composer]
+        let store = store(
+            [],
+            reports: [
+                ManagerReport(manager: .composer, status: .error, message: "env: php: No such file or directory"),
+                ManagerReport(manager: .npm, status: .error, message: "Error: EACCES"),
+            ])
+        XCTAssertEqual(
+            store.problems.map(\.manager), [.npm],
+            "a manager that is turned off is not scanned again, so its last error must not be reported")
+    }
+
     func testDiscoveredManagersAreTheOnesFoundOnThisMac() {
         let store = store(
             [],
