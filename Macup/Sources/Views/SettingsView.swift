@@ -49,6 +49,15 @@ struct SettingsView: View {
                 Toggle("Notify when updates become ready", isOn: $settings.notificationsEnabled)
                 Toggle("Show the number of updates in the menu bar", isOn: $settings.showMenuBarCount)
                 Toggle("Include Homebrew apps that update themselves", isOn: $settings.brewGreedy)
+                Toggle(isOn: $settings.showMacOSUpdates) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Show macOS updates")
+                        Text(
+                            "System and Apple app updates from Software Update. System Settings already announces these, and MacUp can only open it for you."
+                        )
+                        .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Toggle(isOn: $settings.hideSystemPackages) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Hide packages that belong to macOS")
@@ -117,6 +126,7 @@ struct SettingsView: View {
         .frame(minWidth: 520, idealWidth: 640, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
         .onChange(of: settings.disabledManagers) { _, _ in Task { await store.scan() } }
         .onChange(of: settings.brewGreedy) { _, _ in Task { await store.scan(managers: [.brew]) } }
+        .onChange(of: settings.showMacOSUpdates) { _, on in if on { Task { await store.scan(managers: [.macos]) } } }
         .onChange(of: settings.checkIntervalHours) { _, _ in store.restartSchedule() }
     }
 

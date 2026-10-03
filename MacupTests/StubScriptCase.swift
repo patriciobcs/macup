@@ -16,6 +16,7 @@ class StubScriptCase: XCTestCase {
         var securityMinAge: Double
         var ignored: Set<String>
         var hideSystem: Bool
+        var showMacOS: Bool
         var disabled: Set<Manager>
         var auto: Bool
         var autoInterval: Double
@@ -29,12 +30,13 @@ class StubScriptCase: XCTestCase {
         saved = SavedPreferences(
             minAge: settings.minAgeHours, securityMinAge: settings.securityMinAgeHours,
             ignored: settings.ignoredPackages, hideSystem: settings.hideSystemPackages,
-            disabled: settings.disabledManagers, auto: settings.autoUpdate,
+            showMacOS: settings.showMacOSUpdates, disabled: settings.disabledManagers, auto: settings.autoUpdate,
             autoInterval: settings.autoUpdateIntervalHours, notify: settings.notificationsEnabled)
         settings.minAgeHours = 0
         settings.securityMinAgeHours = 0
         settings.ignoredPackages = []
         settings.hideSystemPackages = true
+        settings.showMacOSUpdates = true
         settings.autoUpdate = false
         settings.autoUpdateIntervalHours = 24
         settings.notificationsEnabled = false
@@ -100,6 +102,7 @@ class StubScriptCase: XCTestCase {
             settings.securityMinAgeHours = saved.securityMinAge
             settings.ignoredPackages = saved.ignored
             settings.hideSystemPackages = saved.hideSystem
+            settings.showMacOSUpdates = saved.showMacOS
             settings.disabledManagers = saved.disabled
             settings.autoUpdate = saved.auto
             settings.autoUpdateIntervalHours = saved.autoInterval

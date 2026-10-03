@@ -29,6 +29,9 @@ final class Preferences {
     var ignoredPackages: Set<String> { didSet { d.set(ignoredPackages.sorted(), forKey: "ignoredPackages") } }
     /// Hide packages that belong to macOS itself (system Ruby gems, Xcode Python). Default: on.
     var hideSystemPackages: Bool { didSet { d.set(hideSystemPackages, forKey: "hideSystemPackages") } }
+    /// List macOS and Apple app updates from Software Update. Default: off, since System Settings
+    /// already announces them and MacUp can only hand them off there.
+    var showMacOSUpdates: Bool { didSet { d.set(showMacOSUpdates, forKey: "showMacOSUpdates") } }
     var hasOnboarded: Bool { didSet { d.set(hasOnboarded, forKey: "hasOnboarded") } }
     /// Show the number of ready updates next to the menu bar icon. Default: on.
     var showMenuBarCount: Bool { didSet { d.set(showMenuBarCount, forKey: "showMenuBarCount") } }
@@ -64,13 +67,29 @@ final class Preferences {
         disabledManagers = Set((d.stringArray(forKey: "disabledManagers") ?? []).compactMap(Manager.init(rawValue:)))
         ignoredPackages = Set(d.stringArray(forKey: "ignoredPackages") ?? [])
         hideSystemPackages = d.object(forKey: "hideSystemPackages") as? Bool ?? true
+        showMacOSUpdates = d.bool(forKey: "showMacOSUpdates")
         hasOnboarded = d.bool(forKey: "hasOnboarded")
         launchAtLogin = SMAppService.mainApp.status == .enabled
         showMenuBarCount = d.object(forKey: "showMenuBarCount") as? Bool ?? true
         commandOverrides = d.dictionary(forKey: "commandOverrides") as? [String: String] ?? [:]
     }
 
-    var enabledManagers: [Manager] { Manager.allCases.filter { !disabledManagers.contains($0) } }
+    var enabledManagers: [Manager] { Manager.allCases.filter(isEnabled) }
+
+    /// macOS updates have their own preference, off by default; every other manager is on unless turned off.
+    func isEnabled(_ manager: Manager) -> Bool {
+        manager == .macos ? showMacOSUpdates : !disabledManagers.contains(manager)
+    }
+
+    func setEnabled(_ manager: Manager, _ on: Bool) {
+        if manager == .macos {
+            showMacOSUpdates = on
+        } else if on {
+            disabledManagers.remove(manager)
+        } else {
+            disabledManagers.insert(manager)
+        }
+    }
 
     func threshold(for pkg: OutdatedPackage) -> TimeInterval {
         (pkg.isSecurity ? securityMinAgeHours : minAgeHours) * 3600

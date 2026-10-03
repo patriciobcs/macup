@@ -271,6 +271,7 @@ final class PreferencesRoundTripTests: XCTestCase {
             "notify": settings.notificationsEnabled, "auto": settings.autoUpdate,
             "autoInterval": settings.autoUpdateIntervalHours, "disabled": settings.disabledManagers,
             "ignored": settings.ignoredPackages, "hideSystem": settings.hideSystemPackages,
+            "macos": settings.showMacOSUpdates,
             "onboarded": settings.hasOnboarded, "count": settings.showMenuBarCount,
             "overrides": settings.commandOverrides,
         ]
@@ -287,6 +288,7 @@ final class PreferencesRoundTripTests: XCTestCase {
         settings.disabledManagers = saved["disabled"] as? Set<Manager> ?? []
         settings.ignoredPackages = saved["ignored"] as? Set<String> ?? []
         settings.hideSystemPackages = saved["hideSystem"] as? Bool ?? true
+        settings.showMacOSUpdates = saved["macos"] as? Bool ?? false
         settings.hasOnboarded = saved["onboarded"] as? Bool ?? false
         settings.showMenuBarCount = saved["count"] as? Bool ?? true
         settings.commandOverrides = saved["overrides"] as? [String: String] ?? [:]
@@ -302,6 +304,7 @@ final class PreferencesRoundTripTests: XCTestCase {
         settings.autoUpdate = true
         settings.autoUpdateIntervalHours = 48
         settings.hideSystemPackages = false
+        settings.showMacOSUpdates = true
         settings.hasOnboarded = true
         settings.showMenuBarCount = false
         settings.disabledManagers = [.npm, .brew]
@@ -316,6 +319,7 @@ final class PreferencesRoundTripTests: XCTestCase {
         XCTAssertTrue(d.bool(forKey: "autoUpdate"))
         XCTAssertEqual(d.double(forKey: "autoUpdateIntervalHours"), 48)
         XCTAssertFalse(d.bool(forKey: "hideSystemPackages"))
+        XCTAssertTrue(d.bool(forKey: "showMacOSUpdates"))
         XCTAssertTrue(d.bool(forKey: "hasOnboarded"))
         XCTAssertFalse(d.bool(forKey: "showMenuBarCount"))
         XCTAssertEqual(d.stringArray(forKey: "disabledManagers"), ["brew", "npm"], "stored sorted")
@@ -341,9 +345,11 @@ final class PreferencesRoundTripTests: XCTestCase {
         XCTAssertFalse(fresh.brewGreedy)
         XCTAssertTrue(fresh.notificationsEnabled)
         XCTAssertTrue(fresh.hideSystemPackages, "packages macOS owns stay out of the way")
+        XCTAssertFalse(fresh.showMacOSUpdates, "System Settings already announces these")
+        XCTAssertFalse(fresh.enabledManagers.contains(.macos), "so they are not even checked")
         XCTAssertTrue(fresh.showMenuBarCount)
         XCTAssertFalse(fresh.hasOnboarded)
-        XCTAssertEqual(fresh.disabledManagers, [], "every manager found is used")
+        XCTAssertEqual(fresh.disabledManagers, [], "every other manager found is used")
         XCTAssertEqual(fresh.ignoredPackages, [])
         XCTAssertEqual(fresh.commandOverrides, [:], "the built-in commands")
     }
@@ -379,9 +385,26 @@ final class PreferencesRoundTripTests: XCTestCase {
     }
 
     func testEnabledManagersIsWhateverIsNotTurnedOff() {
+        settings.showMacOSUpdates = true
         settings.disabledManagers = [.npm]
         XCTAssertFalse(settings.enabledManagers.contains(.npm))
         XCTAssertEqual(settings.enabledManagers.count, Manager.allCases.count - 1)
+    }
+
+    func testMacOSUpdatesAreTurnedOnAndOffByTheirOwnPreference() {
+        settings.disabledManagers = []
+        settings.showMacOSUpdates = false
+        XCTAssertFalse(settings.isEnabled(.macos))
+        XCTAssertFalse(settings.enabledManagers.contains(.macos))
+
+        settings.setEnabled(.macos, true)
+        XCTAssertTrue(settings.showMacOSUpdates)
+        XCTAssertTrue(settings.enabledManagers.contains(.macos))
+        XCTAssertEqual(settings.disabledManagers, [], "the manager list is left alone")
+
+        settings.setEnabled(.npm, false)
+        XCTAssertEqual(settings.disabledManagers, [.npm])
+        XCTAssertFalse(settings.isEnabled(.npm))
     }
 
     func testSecurityFixesUseTheShorterThreshold() {

@@ -11,7 +11,7 @@ extension UpdateStore {
         // Packages found before a manager was turned off stay in the list until it is scanned again,
         // so the disabled set is checked here rather than relied on from the last scan.
         packages.filter {
-            !settings.disabledManagers.contains($0.manager) && !settings.ignoredPackages.contains($0.id)
+            settings.isEnabled($0.manager) && !settings.ignoredPackages.contains($0.id)
                 && !(settings.hideSystemPackages && $0.isSystem) && !Self.isSelfCask($0)
         }
     }

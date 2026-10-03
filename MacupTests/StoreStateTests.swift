@@ -8,6 +8,7 @@ final class StoreStateTests: XCTestCase {
     private let settings = Preferences.shared
     private var savedIgnored: Set<String> = []
     private var savedHideSystem = true
+    private var savedShowMacOS = false
     private var savedMinAge: Double = 24
     private var savedSecurityMinAge: Double = 4
 
@@ -15,10 +16,12 @@ final class StoreStateTests: XCTestCase {
         // Preferences is a singleton backed by the real defaults, so put back whatever was there.
         savedIgnored = settings.ignoredPackages
         savedHideSystem = settings.hideSystemPackages
+        savedShowMacOS = settings.showMacOSUpdates
         savedMinAge = settings.minAgeHours
         savedSecurityMinAge = settings.securityMinAgeHours
         settings.ignoredPackages = []
         settings.hideSystemPackages = true
+        settings.showMacOSUpdates = true
         // What counts as settled is the subject of several of these tests, so it is pinned rather than
         // inherited: another class that leaves the thresholds at zero, or a person whose own copy is
         // configured differently, would otherwise decide the outcome here.
@@ -29,6 +32,7 @@ final class StoreStateTests: XCTestCase {
     override func tearDown() async throws {
         settings.ignoredPackages = savedIgnored
         settings.hideSystemPackages = savedHideSystem
+        settings.showMacOSUpdates = savedShowMacOS
         settings.minAgeHours = savedMinAge
         settings.securityMinAgeHours = savedSecurityMinAge
     }
@@ -68,6 +72,17 @@ final class StoreStateTests: XCTestCase {
         settings.hideSystemPackages = false
         XCTAssertEqual(store.visible.map(\.name).sorted(), ["psych", "shown"])
         XCTAssertEqual(store.hiddenSystemCount, 0)
+    }
+
+    func testMacOSUpdatesStayOutOfSightUnlessAskedFor() {
+        let store = store([
+            pkg("lodash", released: 30 * 3600), pkg("Safari", manager: .macos, released: 30 * 3600),
+        ])
+        settings.showMacOSUpdates = false
+        XCTAssertEqual(store.visible.map(\.name), ["lodash"])
+        XCTAssertEqual(store.badgeCount, 1, "and they are not counted in the menu bar either")
+        settings.showMacOSUpdates = true
+        XCTAssertEqual(store.visible.map(\.name).sorted(), ["Safari", "lodash"])
     }
 
     // MARK: Waiting for a release to settle

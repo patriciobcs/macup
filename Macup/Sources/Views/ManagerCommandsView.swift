@@ -217,16 +217,7 @@ struct ManagerSettingsRow: View {
             ManagerCommandsView(manager: manager)
         } label: {
             Toggle(
-                isOn: Binding(
-                    get: { !settings.disabledManagers.contains(manager) },
-                    set: { on in
-                        if on {
-                            settings.disabledManagers.remove(manager)
-                        } else {
-                            settings.disabledManagers.insert(manager)
-                        }
-                    }
-                )
+                isOn: Binding(get: { settings.isEnabled(manager) }, set: { settings.setEnabled(manager, $0) })
             ) {
                 HStack {
                     Label(manager.title, systemImage: manager.symbol)

@@ -102,16 +102,7 @@ struct ManagerSetupRow: View {
             if report?.status == .ok {
                 Toggle(
                     "",
-                    isOn: Binding(
-                        get: { !settings.disabledManagers.contains(manager) },
-                        set: { on in
-                            if on {
-                                settings.disabledManagers.remove(manager)
-                            } else {
-                                settings.disabledManagers.insert(manager)
-                            }
-                        }
-                    )
+                    isOn: Binding(get: { settings.isEnabled(manager) }, set: { settings.setEnabled(manager, $0) })
                 )
                 .labelsHidden().controlSize(.small)
                 .accessibilityLabel("Use \(manager.title)")
