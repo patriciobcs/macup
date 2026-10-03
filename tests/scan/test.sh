@@ -72,6 +72,17 @@ check "a tool with no version reports its path instead" "$out" "(pnpm at /" \
   && check "and the path points at the tool itself" "$out" "brokenpnpm/pnpm)"
 check "and the error says what the tool said" "$out" "dynamic import callback"
 
+# --- pnpm 11 refuses global commands unless $PNPM_HOME/bin is on PATH, even before it exists (#17) ---
+stub pnpm11 '[[ "$1" == "--version" ]] && { echo 11.22.0; exit 0 }
+bin=${PNPM_HOME:-$HOME/Library/pnpm}/bin
+[[ ":$PATH:" == *":$bin:"* ]] || { echo "[ERROR] The configured global bin directory \"$bin\" is not in PATH" >&2; exit 1 }
+echo "{}"' pnpm
+fresh=$(mktemp -d)
+out=$(run pnpm11 HOME="$fresh" zsh "$SCAN" pnpm 2>/dev/null)
+check "pnpm: a fresh home with no global bin directory yet still scans" "$out" "M	pnpm	ok"
+out=$(run pnpm11 HOME="$fresh" PNPM_HOME="$fresh/custom" zsh "$SCAN" pnpm 2>/dev/null)
+check "pnpm: the bin directory of a PNPM_HOME from the login shell is put on PATH" "$out" "M	pnpm	ok"
+
 # Nothing outdated is the normal case: npm prints nothing and exits cleanly.
 stub quiet 'exit 0' npm
 out=$(run quiet zsh "$SCAN" npm 2>/dev/null)

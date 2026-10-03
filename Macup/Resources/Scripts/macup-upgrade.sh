@@ -17,7 +17,14 @@ export PATH
 # Standalone pnpm needs PNPM_HOME for global operations; derive it when the login shell did not provide it.
 if [[ -z "${PNPM_HOME:-}" ]]; then
   for d in "$HOME/Library/pnpm" "$HOME/.local/share/pnpm"; do [[ -d "$d" ]] && { export PNPM_HOME="$d"; break; }; done
+  # Nothing installed globally yet: fall back to pnpm's own default location.
+  if [[ -z "${PNPM_HOME:-}" ]]; then
+    if [[ "$OSTYPE" == darwin* ]]; then export PNPM_HOME="$HOME/Library/pnpm"; else export PNPM_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/pnpm"; fi
+  fi
 fi
+# pnpm 11 refuses global commands unless $PNPM_HOME/bin is on PATH, even before that directory exists
+# (issue #17), so it is added whether or not it is there yet.
+[[ ":$PATH:" != *":$PNPM_HOME/bin:"* ]] && export PATH="$PATH:$PNPM_HOME/bin"
 export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1 npm_config_update_notifier=false CI=1
 
 source "${0:A:h}/macup-commands.sh"
