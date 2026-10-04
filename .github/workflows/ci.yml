@@ -49,6 +49,7 @@ jobs:
               - 'tests/scan/**'
               - 'tests/upgrade/**'
               - 'tests/release/**'
+              - 'tests/cli/**'
               - 'project.yml'
               - 'scripts/**'
               - '.swift-format'

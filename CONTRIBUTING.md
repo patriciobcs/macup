@@ -23,7 +23,7 @@ The app is a SwiftUI shell around three zsh scripts in `Macup/Resources/Scripts`
 
 ## Checks
 
-`scripts/check.sh` runs everything locally: format and lint checks, the scan script tests, the unit tests, a coverage report, a render of every view from fixtures, the site checks and script syntax. `scripts/check.sh --bench` adds the Linux bench. CI runs the same script on a macOS runner, so what passes here passes there.
+`scripts/check.sh` runs everything locally: format and lint checks, the scan script tests, the unit tests, a coverage report, a render of every view from fixtures, the command line end to end, the site checks and script syntax. `scripts/check.sh --bench` adds the Linux bench. CI runs the same script on a macOS runner, so what passes here passes there.
 
 Individually: `swift format --in-place --recursive Macup/Sources MacupTests` and `swiftlint` for the app (`brew install swiftlint`), `npm run check` inside `site/` for the website (ESLint, TypeScript, Prettier).
 
@@ -31,15 +31,17 @@ Individually: `swift format --in-place --recursive Macup/Sources MacupTests` and
 
 - **Unit tests** cover the parsers, version comparison, eligibility rules, process handling and the store.
 - **Scan script.** `tests/scan/test.sh` drives `macup-scan.sh` with stub tools on the PATH, so it runs in seconds without depending on what is installed. It covers the behaviour around the managers rather than the managers themselves: results streaming out as each one finishes, a failing manager not taking the others with it, hung managers timing out, the version appearing in failure messages, and bun's fallback for older versions.
+- **Command line.** `tests/cli/test.sh <MacUp.app/Contents/MacOS/MacUp>` runs the built executable linked as `macup`, the way the Homebrew cask links it, against a real npm whose global packages live in a throwaway home with settings of their own: check, status and `--json`, a dry run, ignore and unignore, a real upgrade while another process holds the update lock, and a failing one. It needs the npm registry and changes nothing outside that home.
 - **Linux bench.** `tests/docker/test.sh` builds an Ubuntu image with 14 managers and packages pinned to old versions, then runs the scan and dry-run upgrades and removals. Needs Docker or a compatible runtime. CI runs it when the scripts change.
 - **macOS integration.** `tests/macos/` installs every manager on a disposable Mac or VM, pins old packages, performs real upgrades and removals, and verifies each by rescanning. Run it through the CI workflow’s manual trigger with `macos_integration=true`; it installs and changes packages only on a disposable GitHub runner. Do not run `tests/macos/setup.sh` on a Mac you care about.
 
 ## Coverage
 
-`scripts/check.sh` writes `build/coverage.lcov` and prints the total. It is measured twice and uploaded under two flags:
+`scripts/check.sh` writes `build/coverage.lcov` and prints the total. It is measured three ways and uploaded under three flags:
 
 - **unit** — the XCTest suite, which covers the parsers, versions, eligibility, the registry lookups, the store and the shell environment.
 - **render** — the offscreen render of every view from fixtures. SwiftUI view bodies only run when something draws them, so this is what covers `Macup/Sources/Views`. It proves a view builds and draws with the given state, nothing more; behaviour worth asserting belongs in a test.
+- **cli** — `tests/cli/test.sh`, the real executable run as `macup` in a terminal, one profile per process.
 
 The report is split into two components, `logic` and `views`. Views are mostly layout, and a good share of their lines are tap handlers that only a real click can reach, so a blended figure says little about either half. As of writing: logic 94.8%, views 87.6%. Aim at the first.
 

@@ -1,4 +1,4 @@
-# The macOS CI job runs scripts/check.sh and uploads unit and rendered-view coverage.
+# The macOS CI job runs scripts/check.sh and uploads unit, rendered-view and command-line coverage.
 # Coverage statuses are informational; the build and tests themselves must pass.
 coverage:
   status:
@@ -10,7 +10,8 @@ coverage:
         informational: true
 
 # unit: the XCTest suite. render: the offscreen draw of every view, which is the only thing that
-# runs SwiftUI view bodies. See CONTRIBUTING.md.
+# runs SwiftUI view bodies. cli: the built executable run as `macup` against a real npm
+# (tests/cli/test.sh). See CONTRIBUTING.md.
 flags:
   unit:
     paths:
@@ -18,6 +19,9 @@ flags:
   render:
     paths:
       - Macup/Sources/Views
+  cli:
+    paths:
+      - Macup/Sources
 
 # Views are mostly layout, and a third of their lines are tap handlers that only a real click can
 # reach, so a single blended number says little. Components split the report without changing what is
@@ -32,6 +36,7 @@ component_management:
         - Macup/Sources/Services/**
         - Macup/Sources/Models/**
         - Macup/Sources/App/**
+        - Macup/Sources/CLI/**
     - component_id: views
       name: views
       paths:

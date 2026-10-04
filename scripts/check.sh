@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Everything CI used to run on macOS, locally: format, lint, unit tests, a render of every view, the
-# site checks, and script syntax. Add --bench to also run the Linux package-manager bench in Docker.
+# command line end to end, the site checks, and script syntax. Add --bench to also run the Linux package-manager bench in Docker.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 step() { print -P "%F{blue}==>%f $1"; }
@@ -40,6 +40,11 @@ LLVM_PROFILE_FILE="$PWD/build/render.profraw" MACUP_SCREENSHOTS="$shots" \
   build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
 [[ "$(ls "$shots"/*.png | wc -l | tr -d ' ')" == 6 ]] || { echo "expected 6 renders" >&2; exit 1; }
 rm -rf "$shots"
+step "command line, end to end"
+# The built executable linked as `macup`, against a real npm in a throwaway home. %p: one profile per
+# process, since every macup call in the test is a process of its own.
+rm -f build/cli-*.profraw(N)
+LLVM_PROFILE_FILE="$PWD/build/cli-%p.profraw" tests/cli/test.sh build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
 step "coverage"
 # Xcode links the app's own code into a debug dylib; the executable beside it is only a stub.
 dylib=build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp.debug.dylib
@@ -49,9 +54,11 @@ cov() {  # cov <profile> <output>: repo-relative lcov for the app's own sources
     | sed "s|^SF:$PWD/|SF:|" > "$2"
 }
 xcrun llvm-profdata merge -sparse build/render.profraw -o build/render.profdata
-xcrun llvm-profdata merge -sparse "$tests" build/render.profdata -o build/coverage.profdata
+xcrun llvm-profdata merge -sparse build/cli-*.profraw -o build/cli.profdata
+xcrun llvm-profdata merge -sparse "$tests" build/render.profdata build/cli.profdata -o build/coverage.profdata
 cov "$tests" build/coverage-unit.lcov
 cov build/render.profdata build/coverage-render.lcov
+cov build/cli.profdata build/coverage-cli.lcov
 cov build/coverage.profdata build/coverage.lcov
 xcrun llvm-cov report -instr-profile build/coverage.profdata "$dylib" -ignore-filename-regex='MacupTests' | tail -1
 # Uploaded only when a token is present, since the tests run here rather than in CI.
@@ -61,6 +68,7 @@ if [[ -n "${CODECOV_TOKEN:-}" ]]; then
     # One upload per flag: -F flags the whole upload, not an individual file.
     codecovcli upload-process --disable-search -n unit -f build/coverage-unit.lcov -F unit
     codecovcli upload-process --disable-search -n render -f build/coverage-render.lcov -F render
+    codecovcli upload-process --disable-search -n cli -f build/coverage-cli.lcov -F cli
   else
     echo "CODECOV_TOKEN is set but codecovcli is missing (brew install codecov-cli)" >&2
   fi
