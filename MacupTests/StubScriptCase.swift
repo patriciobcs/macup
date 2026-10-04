@@ -150,13 +150,13 @@ class StubScriptCase: XCTestCase {
     /// Updating MacUp itself is stubbed out by default: the real path either restarts the app or opens
     /// Sparkle's window, neither of which belongs in a test run.
     func store(
-        installSource: InstallSource? = nil, selfUpdate: (@MainActor () async -> Void)? = nil
+        installSource: InstallSource? = nil, selfUpdate: (@MainActor (_ quiet: Bool) async -> Void)? = nil
     )
         -> UpdateStore
     {
         UpdateStore(
             persist: false, directory: directory, installSource: installSource,
-            selfUpdate: selfUpdate ?? {})
+            selfUpdate: selfUpdate ?? { _ in })
     }
 
     func pkg(_ name: String, manager: Manager = .npm, kind: String = "global") -> OutdatedPackage {

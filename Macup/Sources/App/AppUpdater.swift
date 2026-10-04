@@ -49,6 +49,12 @@ final class AppUpdater {
         controller?.checkForUpdates(nil)
     }
 
+    /// Checks without a window of its own: Sparkle only shows one when there is an update to offer,
+    /// never to say that MacUp is already up to date.
+    func checkForUpdatesQuietly() {
+        controller?.updater.checkForUpdatesInBackground()
+    }
+
     /// Starts a fresh copy of the (just replaced) app bundle and quits this one.
     static func relaunch() {
         // The path is passed as an argument, never interpolated into the shell string.

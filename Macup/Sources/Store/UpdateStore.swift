@@ -59,11 +59,12 @@ final class UpdateStore {
     /// (fixtures). `directory` and `installSource` are only passed by tests.
     /// Updating MacUp itself replaces the running app, so tests substitute this rather than have the
     /// test runner restart itself halfway through.
-    private let selfUpdateOverride: (@MainActor () async -> Void)?
+    /// It is told whether the check was a quiet one.
+    private let selfUpdateOverride: (@MainActor (_ quiet: Bool) async -> Void)?
 
     init(
         persist: Bool = true, directory: URL? = nil, installSource: InstallSource? = nil,
-        selfUpdate: (@MainActor () async -> Void)? = nil
+        selfUpdate: (@MainActor (_ quiet: Bool) async -> Void)? = nil
     ) {
         installSourceOverride = installSource
         selfUpdateOverride = selfUpdate
@@ -257,8 +258,9 @@ final class UpdateStore {
 
     func upgradeAllEligible() async {
         await upgradeAll(managers: Manager.allCases)
-        // Last: updating MacUp replaces the running app, which would cut the batch short.
-        await updateSelf()
+        // Last: updating MacUp replaces the running app, which would cut the batch short. Quietly: the
+        // batch was about packages, so finding MacUp already current is not worth a window.
+        await updateSelf(quiet: true)
     }
 
     /// Upgrades one package at a time so each row gets its own result, then rescans once.
@@ -289,21 +291,23 @@ final class UpdateStore {
     /// Updates MacUp itself the way this copy was installed. Nothing happens when it is already current.
     /// The decision is made here; only the act of updating is substituted in tests, so the rules below
     /// are the ones that actually run.
-    func updateSelf(unattended: Bool = false) async {
+    /// `quiet` is for checks the user did not ask for by name, such as the end of Update All: a window
+    /// appears only when there is an update to offer, never to say there is none.
+    func updateSelf(unattended: Bool = false, quiet: Bool = false) async {
         switch installSource {
         case .homebrew:
             guard let cask = selfCaskUpdate else { return }
             // Replacing the app unasked deserves the same settling delay as everything else, and the
             // cask goes through Homebrew, so it is subject to the same password rule.
             if unattended, !isEligible(cask) || needsAdmin(.brew) { return }
-            if let selfUpdateOverride { return await selfUpdateOverride() }
+            if let selfUpdateOverride { return await selfUpdateOverride(quiet) }
             await upgrade(cask)
         case .direct:
             // Sparkle puts a window on screen and takes focus, which has no place in a run nobody asked
             // for. A direct install updates itself when the user checks.
             guard !unattended else { return }
-            if let selfUpdateOverride { return await selfUpdateOverride() }
-            AppUpdater.shared.checkForUpdates()
+            if let selfUpdateOverride { return await selfUpdateOverride(quiet) }
+            if quiet { AppUpdater.shared.checkForUpdatesQuietly() } else { AppUpdater.shared.checkForUpdates() }
         }
     }
 

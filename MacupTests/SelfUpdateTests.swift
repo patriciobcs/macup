@@ -10,7 +10,7 @@ final class SelfUpdateTests: StubScriptCase {
     func testUpdateAllUpdatesMacUpItselfLast() async {
         // The Homebrew upgrade of MacUp relaunches the app, so it has to come after everything else.
         var updatedSelfAfter: [String] = []
-        let store = store(installSource: .homebrew) { @MainActor in
+        let store = store(installSource: .homebrew) { @MainActor _ in
             updatedSelfAfter = ["marker"]
         }
         try? reportOutdatedSelfCask()  // Homebrew keeps reporting it until it is actually upgraded
@@ -26,9 +26,23 @@ final class SelfUpdateTests: StubScriptCase {
         XCTAssertTrue(store.log.contains("upgraded formula:jq"))
     }
 
+    func testUpdateAllChecksADirectInstallQuietly() async {
+        // Sparkle's own check always puts up a window, "You're up to date" included. At the end of a
+        // batch about packages that is noise, so only an available update may show one.
+        var checks: [Bool] = []
+        let store = store(installSource: .direct) { @MainActor quiet in checks.append(quiet) }
+        store.loadFixture(reports: [], packages: [pkg("lodash")], log: "")
+
+        await store.upgradeAllEligible()
+        XCTAssertEqual(checks, [true], "Update All checks for MacUp without a window of its own")
+
+        await store.updateSelf()
+        XCTAssertEqual(checks, [true, false], "while Check for Updates in Settings still shows Sparkle's")
+    }
+
     func testUpdatingOneManagerLeavesMacUpAlone() async {
         var updatedSelf = false
-        let store = store(installSource: .homebrew) { @MainActor in
+        let store = store(installSource: .homebrew) { @MainActor _ in
             updatedSelf = true
         }
         store.loadFixture(reports: [], packages: [pkg("jq", manager: .brew, kind: "formula")], log: "")
@@ -103,7 +117,7 @@ final class SelfUpdateTests: StubScriptCase {
         settings.autoUpdate = true
         settings.minAgeHours = 24
         var updatedSelf = false
-        let store = store(installSource: .homebrew) { @MainActor in updatedSelf = true }
+        let store = store(installSource: .homebrew) { @MainActor _ in updatedSelf = true }
         var cask = pkg("macup", manager: .brew, kind: "cask")
         cask.latest = "99.0.0"
         cask.releaseDate = Date()  // just released
