@@ -22,9 +22,11 @@ if [[ -z "${PNPM_HOME:-}" ]]; then
     if [[ "$OSTYPE" == darwin* ]]; then export PNPM_HOME="$HOME/Library/pnpm"; else export PNPM_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/pnpm"; fi
   fi
 fi
-# pnpm 11 refuses global commands unless $PNPM_HOME/bin is on PATH, even before that directory exists
-# (issue #17), so it is added whether or not it is there yet.
-[[ ":$PATH:" != *":$PNPM_HOME/bin:"* ]] && export PATH="$PATH:$PNPM_HOME/bin"
+# pnpm refuses global commands unless its global bin directory is on PATH, even before that directory
+# exists (issue #17): $PNPM_HOME itself up to pnpm 10, $PNPM_HOME/bin from 11. Both go on PATH whether
+# or not they are there yet.
+for d in "$PNPM_HOME" "$PNPM_HOME/bin"; do [[ ":$PATH:" != *":$d:"* ]] && PATH="$PATH:$d"; done
+export PATH
 export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1 npm_config_update_notifier=false CI=1
 
 source "${0:A:h}/macup-commands.sh"

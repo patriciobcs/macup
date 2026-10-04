@@ -31,9 +31,11 @@ if [[ -z "${PNPM_HOME:-}" ]]; then
     if [[ "$OSTYPE" == darwin* ]]; then export PNPM_HOME="$HOME/Library/pnpm"; else export PNPM_HOME="${XDG_DATA_HOME:-$HOME/.local/share}/pnpm"; fi
   fi
 fi
-# pnpm 11 refuses global commands unless $PNPM_HOME/bin is on PATH, even before that directory exists
-# (issue #17), so it is added whether or not it is there yet.
-[[ ":$PATH:" != *":$PNPM_HOME/bin:"* ]] && export PATH="$PATH:$PNPM_HOME/bin"
+# pnpm refuses global commands unless its global bin directory is on PATH, even before that directory
+# exists (issue #17): $PNPM_HOME itself up to pnpm 10, $PNPM_HOME/bin from 11. Both go on PATH whether
+# or not they are there yet.
+for d in "$PNPM_HOME" "$PNPM_HOME/bin"; do [[ ":$PATH:" != *":$d:"* ]] && PATH="$PATH:$d"; done
+export PATH
 # Homebrew refreshes its API cache on `outdated` at most once a day; without that refresh results go stale.
 export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1
 export npm_config_update_notifier=false
@@ -191,9 +193,18 @@ scan_pnpm() {
   out=$(eval "$(check_cmd pnpm)" 2>"$err"); local rc=$?
   crashed $rc "$out" "$err" && { header pnpm error "pnpm outdated failed$(vtag pnpm): $(errline "$err")"; return; }
   [[ -z "$out" ]] && out="{}"
-  [[ "$out" != \{* ]] && { header pnpm error "pnpm outdated failed$(vtag pnpm): $(errline "$err")"; return; }
+  # Up to pnpm 10 the global directory has no package.json until something is installed there, and
+  # `outdated` says so instead of reporting nothing. With nothing installed, nothing is outdated.
+  [[ "$out" == *ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND* ]] && { header pnpm ok; return; }
+  if [[ "$out" != \{* ]]; then
+    # pnpm prints its own errors on stdout, so fall back to that when stderr has nothing to say.
+    [[ -s "$err" ]] || print -r -- "$out" > "$err"
+    header pnpm error "pnpm outdated failed$(vtag pnpm): $(errline "$err")"; return
+  fi
   header pnpm ok
   local root; root=$(pnpm root -g 2>/dev/null)
+  # pnpm 11 gives every global package a folder of its own: <root>/<hash>/node_modules/<name>.
+  pnpm_dir() { local -a d=("$root/$1"(N) "$root"/*/node_modules/"$1"(Nom)); print -r -- "${d[1]:-}" }
   # pnpm JSON is compact or pretty; normalise to one key per line.
   local name="" current="" latest=""
   while IFS= read -r line; do
@@ -201,10 +212,10 @@ scan_pnpm() {
       *'"current"'*) current=$(printf '%s\n' "$line" | jstr current) ;;
       *'"latest"'*)  latest=$(printf '%s\n' "$line" | jstr latest) ;;
       *'"'*'":'*'{'*)  name=$(printf '%s\n' "$line" | sed -nE 's/^[[:space:]]*"([^"]*)"[[:space:]]*:.*/\1/p') ;;
-      *'}'*) [[ -n "$name" && -n "$latest" && "$current" != "$latest" ]] && pkg pnpm "$name" "${current:-?}" "$latest" global "" "$(mtime "$root/$name")"
+      *'}'*) [[ -n "$name" && -n "$latest" && "$current" != "$latest" ]] && pkg pnpm "$name" "${current:-?}" "$latest" global "" "$(mtime "$(pnpm_dir "$name")")"
              name="" current="" latest="" ;;
     esac
-  done <<< "$(printf '%s\n' "$out" | awk '{ gsub(/[{,]/, "&\n"); print }')"
+  done <<< "$(printf '%s\n' "$out" | awk '{ gsub(/[{,]/, "&\n"); gsub(/}/, "\n}"); print }')"
 }
 
 scan_pip() {
@@ -394,7 +405,7 @@ scan_mise() {
         fi
         [[ "$line" == *'}'* && -n "$name" && -n "$latest" ]] && { name=""; current=""; latest=""; } ;;
     esac
-  done <<< "$(printf '%s\n' "$out" | awk '{ gsub(/[{,]/, "&\n"); print }')"
+  done <<< "$(printf '%s\n' "$out" | awk '{ gsub(/[{,]/, "&\n"); gsub(/}/, "\n}"); print }')"
 }
 
 scan_pipx() {

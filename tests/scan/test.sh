@@ -83,6 +83,31 @@ check "pnpm: a fresh home with no global bin directory yet still scans" "$out" "
 out=$(run pnpm11 HOME="$fresh" PNPM_HOME="$fresh/custom" zsh "$SCAN" pnpm 2>/dev/null)
 check "pnpm: the bin directory of a PNPM_HOME from the login shell is put on PATH" "$out" "M	pnpm	ok"
 
+# Up to pnpm 10 the bin directory is $PNPM_HOME itself, and the same check applies before it exists.
+# With nothing installed globally, `outdated` complains on stdout that there is no package.json.
+stub pnpm10 '[[ "$1" == "--version" ]] && { echo 10.34.6; exit 0 }
+bin=${PNPM_HOME:-$HOME/Library/pnpm}
+[[ ":$PATH:" == *":$bin:"* ]] || { echo " ERROR  The configured global bin directory \"$bin\" is not in PATH"; exit 1 }
+echo " ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND  No package.json was found in \"$bin/global/5\"."; exit 1' pnpm
+fresh=$(mktemp -d)
+out=$(run pnpm10 HOME="$fresh" zsh "$SCAN" pnpm 2>/dev/null)
+check "pnpm 10: a fresh home with nothing installed globally is up to date" "$out" "M	pnpm	ok"
+
+# pnpm prints its errors on stdout, so that is where the message has to come from.
+stub pnpmstdout '[[ "$1" == "--version" ]] && { echo 10.34.6; exit 0 }
+echo " ERR_PNPM_META_FETCH_FAIL  GET https://registry.npmjs.org/is-odd: request failed"; exit 1' pnpm
+out=$(run pnpmstdout zsh "$SCAN" pnpm 2>/dev/null)
+check "pnpm: an error printed on stdout is reported with its message" "$out" "ERR_PNPM_META_FETCH_FAIL"
+
+# pnpm 11 puts each global package in a folder of its own, which is where its install time is read.
+groot=$(mktemp -d); mkdir -p "$groot/12d5a-hash/node_modules/is-odd"
+stub pnpmisolated '[[ "$1" == "--version" ]] && { echo 11.22.0; exit 0 }
+[[ "$1" == "root" ]] && { echo '"$groot"'; exit 0 }
+echo "{\"is-odd\": {\"current\": \"2.0.0\", \"latest\": \"3.0.1\"}}"; exit 1' pnpm
+out=$(run pnpmisolated zsh "$SCAN" pnpm 2>/dev/null)
+when=$(stat -f %m "$groot/12d5a-hash/node_modules/is-odd" 2>/dev/null || stat -c %Y "$groot/12d5a-hash/node_modules/is-odd")
+check "pnpm 11: the install time is read from the package's own folder" "$out" "P	pnpm	is-odd	2.0.0	3.0.1	global		$when"
+
 # Nothing outdated is the normal case: npm prints nothing and exits cleanly.
 stub quiet 'exit 0' npm
 out=$(run quiet zsh "$SCAN" npm 2>/dev/null)
