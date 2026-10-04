@@ -85,6 +85,24 @@ final class StoreStateTests: XCTestCase {
         XCTAssertEqual(store.visible.map(\.name).sorted(), ["Safari", "lodash"])
     }
 
+    func testAManagerTurnedOffNoLongerReportsAProblem() {
+        let store = store(
+            [],
+            reports: [
+                ManagerReport(manager: .macos, status: .error, message: "took longer than 120s and was stopped"),
+                ManagerReport(manager: .npm, status: .error, message: "Could not resolve host"),
+            ])
+        XCTAssertEqual(store.problems.map(\.manager), [.macos])
+        XCTAssertTrue(store.isOffline)
+
+        settings.showMacOSUpdates = false
+        settings.disabledManagers = [.npm]
+        defer { settings.disabledManagers = [] }
+        XCTAssertEqual(store.problems, [], "its last report is not something left to fix")
+        XCTAssertFalse(store.isOffline)
+        XCTAssertFalse(store.hasScanProblems)
+    }
+
     // MARK: Waiting for a release to settle
 
     func testAFreshReleaseWaitsAndAnOldOneIsReady() {

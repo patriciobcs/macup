@@ -85,6 +85,7 @@ struct OnboardingView: View {
             .padding(16)
         }
         .frame(width: 520, height: 640)
+        .onChange(of: settings.showMacOSUpdates) { _, on in if on { Task { await store.scan(managers: [.macos]) } } }
     }
 }
 
@@ -99,7 +100,8 @@ struct ManagerSetupRow: View {
     var body: some View {
         let report = store.reports.first { $0.manager == manager }
         HStack {
-            if report?.status == .ok {
+            // A manager that starts off (macOS updates) has never been scanned, and still needs a way on.
+            if report?.status == .ok || (report == nil && !settings.isEnabled(manager)) {
                 Toggle(
                     "",
                     isOn: Binding(get: { settings.isEnabled(manager) }, set: { settings.setEnabled(manager, $0) })
@@ -124,7 +126,7 @@ struct ManagerSetupRow: View {
             case .error, .skipped:
                 Label(report?.message ?? "Error", systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                     .font(.callout).lineLimit(1)
-            case nil where store.isScanning:
+            case nil where store.isScanning && settings.isEnabled(manager):
                 // Each manager is checked on its own, so a row waiting says so rather than sitting blank.
                 ProgressView().controlSize(.small)
             case nil:

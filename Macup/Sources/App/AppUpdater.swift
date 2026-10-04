@@ -26,6 +26,8 @@ final class AppUpdater {
 
     let source: InstallSource
     private let controller: SPUStandardUpdaterController?
+    /// Sparkle keeps its delegate weakly, so the probe lives here.
+    private let probe = UpdateProbe()
 
     private init() {
         source = InstallSource.detect()
@@ -33,10 +35,11 @@ final class AppUpdater {
         // and wait at its update window for a click that is not coming. See AutomatedRun.
         if source == .direct, !AutomatedRun.isActive {
             controller = SPUStandardUpdaterController(
-                startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+                startingUpdater: true, updaterDelegate: probe, userDriverDelegate: nil)
         } else {
             controller = nil
         }
+        probe.onUpdateFound = { Task { @MainActor in AppUpdater.shared.checkForUpdates() } }
     }
 
     /// Whether a real Sparkle updater is running behind this. False for Homebrew copies, and for any
@@ -49,10 +52,13 @@ final class AppUpdater {
         controller?.checkForUpdates(nil)
     }
 
-    /// Checks without a window of its own: Sparkle only shows one when there is an update to offer,
-    /// never to say that MacUp is already up to date.
+    /// Checks without a window of its own, and opens Sparkle's usual one only when there is an update to
+    /// offer, never to say that MacUp is already up to date. A probe rather than a background check:
+    /// Sparkle reserves those for its own schedule, and may hold what they find back as a reminder.
     func checkForUpdatesQuietly() {
-        controller?.updater.checkForUpdatesInBackground()
+        guard let updater = controller?.updater, !updater.sessionInProgress else { return }
+        probe.begin()
+        updater.checkForUpdateInformation()
     }
 
     /// Starts a fresh copy of the (just replaced) app bundle and quits this one.
@@ -63,5 +69,37 @@ final class AppUpdater {
         task.arguments = ["-c", "sleep 1; /usr/bin/open -n \"$0\"", Bundle.main.bundlePath]
         try? task.run()
         NSApp.terminate(nil)
+    }
+}
+
+/// Turns a quiet probe into Sparkle's usual window, but only when the probe found an update. Sparkle
+/// reports every kind of check here, including its own scheduled ones, which are left alone.
+final class UpdateProbe: NSObject, SPUUpdaterDelegate {
+    var onUpdateFound: (() -> Void)?
+    private var probing = false
+    private var found = false
+
+    func begin() {
+        probing = true
+        found = false
+    }
+
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) { noteFound() }
+
+    func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+        finished(updateCheck)
+    }
+
+    func noteFound() { if probing { found = true } }
+
+    /// Whether the probe that just ended found something worth showing.
+    @discardableResult
+    func finished(_ check: SPUUpdateCheck) -> Bool {
+        guard check == .updateInformation, probing else { return false }
+        probing = false
+        guard found else { return false }
+        found = false
+        onUpdateFound?()
+        return true
     }
 }

@@ -69,11 +69,15 @@ extension UpdateStore {
         return "\(scanned.count) of \(scanTotal) package managers checked"
     }
 
+    /// Reports of the managers in use. A manager turned off is no longer scanned, so its last report
+    /// would otherwise stay on screen for good, macOS updates included now that they start off.
+    private var activeReports: [ManagerReport] { reports.filter { settings.isEnabled($0.manager) } }
+
     /// Managers that failed for reasons other than being offline: these deserve a report.
-    var problems: [ManagerReport] { reports.filter { $0.status == .error && !$0.isOffline } }
+    var problems: [ManagerReport] { activeReports.filter { $0.status == .error && !$0.isOffline } }
 
     /// At least one manager could not reach the network in the last scan.
-    var isOffline: Bool { reports.contains { $0.isOffline } }
+    var isOffline: Bool { activeReports.contains { $0.isOffline } }
 
     /// An empty package list is only reassuring when the scan itself succeeded.
     var hasScanProblems: Bool { scanError != nil || isOffline || !problems.isEmpty }
