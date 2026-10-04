@@ -50,6 +50,16 @@ final class UpdateStore {
 
     private let persistsState: Bool
 
+    /// A run from the terminal: nothing is announced, nothing is installed on a schedule, and MacUp
+    /// itself is left for the person to update.
+    let isCommandLine: Bool
+    /// Receives the log as it is written, so the command line can print it as it happens.
+    var logSink: ((String) -> Void)?
+    /// Held while anything is being changed, so the app and the command line never update at once.
+    let updateLock: UpdateLock
+    /// Posted by a command-line run that changed something, so a running app picks it up.
+    static let changedElsewhere = Notification.Name("io.github.patriciobcs.macup.changed")
+
     /// How this copy was installed, which decides whether MacUp updates itself through Homebrew.
     /// Resolved lazily so a store is cheap to make; tests pass it in rather than moving the app.
     private let installSourceOverride: InstallSource?
@@ -64,11 +74,12 @@ final class UpdateStore {
 
     init(
         persist: Bool = true, directory: URL? = nil, installSource: InstallSource? = nil,
-        selfUpdate: (@MainActor (_ quiet: Bool) async -> Void)? = nil
+        selfUpdate: (@MainActor (_ quiet: Bool) async -> Void)? = nil, commandLine: Bool = false
     ) {
         installSourceOverride = installSource
         selfUpdateOverride = selfUpdate
         persistsState = persist
+        isCommandLine = commandLine
         let dir =
             directory
             ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -76,18 +87,31 @@ final class UpdateStore {
         if persist { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
         stateURL = dir.appendingPathComponent("state.json")
         history = History(directory: dir)
+        updateLock = UpdateLock(url: dir.appendingPathComponent("update.lock"))
         // A store told where to live keeps its registry cache there too, so tests never touch the real one.
         registry = Registry(directory: directory)
-        if persist, let data = try? Data(contentsOf: stateURL),
+        if persist { loadSavedState() }
+    }
+
+    private func loadSavedState() {
+        guard let data = try? Data(contentsOf: stateURL),
             let saved = try? JSONDecoder.iso.decode(SavedState.self, from: data)
-        {
-            firstSeen = saved.firstSeen
-            packages = saved.packages
-            reports = saved.reports
-            lastScan = saved.lastScan
-            notified = saved.notified
-            lastAutoUpdate = saved.lastAutoUpdate
-        }
+        else { return }
+        firstSeen = saved.firstSeen
+        packages = saved.packages
+        reports = saved.reports
+        lastScan = saved.lastScan
+        notified = saved.notified
+        lastAutoUpdate = saved.lastAutoUpdate
+    }
+
+    /// Picks up what a command-line run wrote: its scan, its history and what it ignored. Skipped while
+    /// this copy is busy, since what it is about to save is newer still.
+    func reloadFromDisk() {
+        guard persistsState, !isBusy else { return }
+        loadSavedState()
+        history.reload()
+        settings.reloadIgnored()
     }
 
     // MARK: Derived state
@@ -100,23 +124,6 @@ final class UpdateStore {
                 kind: .ignore, manager: pkg.manager, package: pkg.name, detail: "\(pkg.installed) → \(pkg.latest)",
                 succeeded: true, packageID: pkg.id))
     }
-
-    func unignore(id: String) {
-        settings.ignoredPackages.remove(id)
-        let parts = id.split(separator: ":", maxSplits: 1).map(String.init)
-        if parts.count == 2, let m = Manager(rawValue: parts[0]) {
-            history.add(ActionRecord(kind: .unignore, manager: m, package: parts[1], detail: "", succeeded: true))
-        }
-    }
-
-    func isEligible(_ pkg: OutdatedPackage) -> Bool {
-        Eligibility.isEligible(
-            pkg, minAge: settings.minAgeHours * 3600,
-            securityMinAge: settings.securityMinAgeHours * 3600, firstSeen: firstSeen, now: clock)
-    }
-
-    func age(of pkg: OutdatedPackage) -> TimeInterval { Eligibility.age(of: pkg, firstSeen: firstSeen) }
-    func referenceDate(of pkg: OutdatedPackage) -> Date? { Eligibility.referenceDate(for: pkg, firstSeen: firstSeen) }
 
     // MARK: Scanning
 
@@ -141,19 +148,6 @@ final class UpdateStore {
     /// Called when the check interval changes: the next scan is rescheduled from now.
     func restartSchedule() { start() }
 
-    /// MacUp's own Homebrew cask when it is outdated. Only meaningful for Homebrew installs; a direct
-    /// install is updated by Sparkle, so a stray cask is ignored there.
-    var selfCaskUpdate: OutdatedPackage? {
-        guard installSource == .homebrew else { return nil }
-        guard let cask = packages.first(where: { $0.manager == .brew && $0.name == "macup" }) else { return nil }
-        // Homebrew compares against the version it recorded when it installed, which is not always what
-        // is running: a copy replaced by hand is newer than the Caskroom thinks. Never offer an update
-        // that the running app already is.
-        return Version.isNewer(cask.latest, than: appVersion) ? cask : nil
-    }
-
-    static func isSelfCask(_ p: OutdatedPackage) -> Bool { p.manager == .brew && p.name == "macup" }
-
     func scan(managers: [Manager]? = nil) async {
         let targets = managers ?? settings.enabledManagers
         if isScanning {
@@ -176,8 +170,9 @@ final class UpdateStore {
             lastScan = Date()
             clock = Date()
             persist()
-            // No point announcing updates that are about to be installed a moment later.
-            if !autoUpdateIsDue { await notifyIfNeeded() }
+            // No point announcing updates that are about to be installed a moment later, nor ones
+            // the person is looking at in the terminal right now.
+            if !autoUpdateIsDue, !isCommandLine { await notifyIfNeeded() }
         } catch {
             scanError = error.localizedDescription
         }
@@ -263,9 +258,10 @@ final class UpdateStore {
         await updateSelf(quiet: true)
     }
 
-    /// Upgrades one package at a time so each row gets its own result, then rescans once.
-    private func upgradeAll(managers: [Manager]) async {
-        let grouped = Dictionary(grouping: eligible, by: \.manager)
+    /// Upgrades one package at a time so each row gets its own result, then rescans once. What is
+    /// upgraded is what is ready, unless `candidates` says otherwise (the command line's `--now`).
+    func upgradeAll(managers: [Manager], candidates: [OutdatedPackage]? = nil) async {
+        let grouped = Dictionary(grouping: candidates ?? eligible, by: \.manager)
         for manager in managers where !(manager.opensExternally && managers.count > 1) {
             guard let items = grouped[manager], !upgrading.contains(manager.rawValue) else { continue }
             upgrading.insert(manager.rawValue)
@@ -311,15 +307,6 @@ final class UpdateStore {
         }
     }
 
-    /// Installs what is ready, at most once per chosen interval. Called after a scan, so it follows the
-    /// same schedule as checking.
-    var autoUpdateIsDue: Bool {
-        guard settings.autoUpdate, !isUpgradingAnything else { return false }
-        let interval = max(1, settings.autoUpdateIntervalHours) * 3600
-        if let lastAutoUpdate, Date().timeIntervalSince(lastAutoUpdate) < interval { return false }
-        return !eligible.isEmpty || selfCaskUpdate != nil
-    }
-
     private func autoUpdateIfDue() async {
         guard autoUpdateIsDue else { return }
         lastAutoUpdate = Date()
@@ -343,6 +330,8 @@ final class UpdateStore {
     private func runUpgrade(manager: Manager, packages items: [OutdatedPackage]) async {
         let args = items.map(\.upgradeArgument)
         appendLog("\n\(Self.logMarker(manager: manager, names: items.map(\.name)))\n")
+        guard takeUpdateLock(for: items) else { return }
+        defer { updateLock.release() }
         var failure: String?
         let outcome = await runLogged({ emit in
             try await ScriptRunner.upgrade(
@@ -383,6 +372,8 @@ final class UpdateStore {
         upgrading.insert(pkg.id)
         defer { upgrading.remove(pkg.id) }
         appendLog("\n\(Self.logMarker(manager: pkg.manager, names: [pkg.name])) remove\n")
+        guard takeUpdateLock(for: [pkg]) else { return }
+        defer { updateLock.release() }
         var failure: String?
         let outcome = await runLogged({ emit in
             try await ScriptRunner.remove(pkg: pkg, brewGreedy: self.settings.brewGreedy, onOutput: emit)
@@ -466,7 +457,18 @@ final class UpdateStore {
         revealCount += 1
     }
 
+    /// Another MacUp (the app, or the command line) is already changing packages: running a second
+    /// package manager command alongside it could update the same thing twice, so this one is refused.
+    private func takeUpdateLock(for items: [OutdatedPackage]) -> Bool {
+        if updateLock.tryAcquire() { return true }
+        let busy = "Another MacUp is updating packages right now. Try again when it has finished."
+        appendLog("✗ \(busy)\n")
+        for item in items { failures[item.id] = busy }
+        return false
+    }
+
     private func appendLog(_ s: String) {
+        logSink?(s)
         log.append(s)
         if log.count > 200_000 { log = String(log.suffix(150_000)) }
     }

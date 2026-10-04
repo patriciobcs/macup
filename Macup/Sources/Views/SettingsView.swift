@@ -68,6 +68,7 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                CommandLineToolRow()
                 LabeledContent("Setup") {
                     Button("Show Setup…") { OnboardingWindow.show(store: store, settings: settings) }.controlSize(
                         .small)

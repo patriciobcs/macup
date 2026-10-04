@@ -33,6 +33,24 @@ MacUp keeps itself current the way it was installed. A Homebrew install lists it
 - **Runs the real commands.** Updates and removals use the manager's own tooling. Output streams into a log, and every action is recorded in a history.
 - **Respects the system.** Packages owned by macOS itself, such as the system Ruby's gems, are hidden by default. Anything that needs an administrator password asks through the standard macOS prompt, never a stored credential.
 - **Errors you can act on.** A failed manager shows one plain sentence with Retry, Copy Details and Report on GitHub. Being offline is one notice, not a list of errors.
+- **Works from the terminal too.** `macup upgrade` does what Update All does, with the same settings.
+
+## Command line
+
+The Homebrew cask puts `macup` on your PATH. With a downloaded copy, use **Settings → Command line tool → Install**.
+
+```sh
+macup                     # what is ready to update, and what is still waiting
+macup check               # check now, then show the same
+macup upgrade             # update what is ready, like Update All
+macup upgrade npm cargo   # only these package managers
+macup upgrade --now       # include updates still waiting out the minimum age
+macup upgrade --dry-run   # print the commands, change nothing
+macup ignore npm:left-pad # stop offering a package (unignore to undo)
+macup status --json       # for scripts
+```
+
+It uses the menu bar app's settings, ignored packages and history, and the app shows what it did. The two never update at the same time: whichever starts second waits, or is told to try again. With no terminal attached, for example from cron, anything that needs an administrator password is skipped, and `--skip-admin` does the same by hand. macOS updates are only handed off to System Settings when named (`macup upgrade macos`). The exit status is 0 when everything worked, 1 when something failed, and 64 for a mistyped command.
 
 ## Supported package managers
 

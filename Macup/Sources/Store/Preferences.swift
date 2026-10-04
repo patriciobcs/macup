@@ -5,7 +5,10 @@ import ServiceManagement
 /// User preferences. Defaults are chosen so the app works with zero configuration.
 @Observable @MainActor
 final class Preferences {
-    static let shared = Preferences()
+    /// MACUP_DEFAULTS_SUITE points a test run at settings of its own, so it never changes the real ones.
+    static let shared = Preferences(
+        defaults: ProcessInfo.processInfo.environment["MACUP_DEFAULTS_SUITE"].flatMap(UserDefaults.init(suiteName:))
+            ?? .standard)
     private let d: UserDefaults
 
     /// Regular updates are shown once the release is at least this old (hours). Default: 1 day.
@@ -89,6 +92,15 @@ final class Preferences {
         } else {
             disabledManagers.insert(manager)
         }
+    }
+
+    /// Writes now: a command-line run exits straight after changing a setting.
+    func flush() { d.synchronize() }
+
+    /// Ignored packages are the one preference the command line changes; read them again after it has.
+    func reloadIgnored() {
+        let saved = Set(d.stringArray(forKey: "ignoredPackages") ?? [])
+        if saved != ignoredPackages { ignoredPackages = saved }
     }
 
     func threshold(for pkg: OutdatedPackage) -> TimeInterval {

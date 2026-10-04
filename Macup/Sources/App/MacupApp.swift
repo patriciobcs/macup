@@ -1,6 +1,5 @@
 import SwiftUI
 
-@main
 struct MacupApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var store = UpdateStore.shared
@@ -49,9 +48,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         center.addObserver(
             self, selector: #selector(windowChanged), name: NSWindow.didBecomeKeyNotification, object: nil)
         center.addObserver(self, selector: #selector(windowChanged), name: NSWindow.willCloseNotification, object: nil)
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(changedElsewhere), name: UpdateStore.changedElsewhere, object: nil)
         if !Preferences.shared.hasOnboarded {
             OnboardingWindow.show(store: UpdateStore.shared, settings: Preferences.shared)
         }
+    }
+
+    /// `macup` in a terminal checked, updated or ignored something: show it, and do not save over it.
+    @objc private func changedElsewhere(_ note: Notification) {
+        DispatchQueue.main.async { UpdateStore.shared.reloadFromDisk() }
     }
 
     @objc private func windowChanged(_ note: Notification) {

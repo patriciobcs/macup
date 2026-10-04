@@ -77,6 +77,8 @@ lipo "$APP/Contents/MacOS/MacUp" -verify_arch arm64 x86_64
 # Exercise the exported, signed Release binary itself before distributing it.
 MACUP_SCREENSHOTS="$PWD/$OUT/validation" "$APP/Contents/MacOS/MacUp"
 [[ "$(find "$OUT/validation" -name '*.png' | wc -l | tr -d ' ')" == 6 ]] || { echo "release render failed" >&2; exit 1; }
+# The same binary is `macup` in a terminal (the cask links it): it must answer as one.
+[[ "$("$APP/Contents/MacOS/MacUp" version)" == "MacUp $VERSION" ]] || { echo "command line check failed" >&2; exit 1; }
 
 # Notarize the app, staple it, then package. Stable asset names keep releases/latest/download links working.
 ZIP="$OUT/MacUp.zip"
@@ -128,6 +130,7 @@ cask "macup" do
   depends_on macos: :sonoma
 
   app "MacUp.app"
+  binary "#{appdir}/MacUp.app/Contents/MacOS/MacUp", target: "macup"
 
   zap trash: [
     "~/Library/Application Support/Macup",

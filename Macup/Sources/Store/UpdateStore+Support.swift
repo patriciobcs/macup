@@ -16,6 +16,45 @@ extension UpdateStore {
         }
     }
 
+    func unignore(id: String) {
+        settings.ignoredPackages.remove(id)
+        let parts = id.split(separator: ":", maxSplits: 1).map(String.init)
+        if parts.count == 2, let m = Manager(rawValue: parts[0]) {
+            history.add(ActionRecord(kind: .unignore, manager: m, package: parts[1], detail: "", succeeded: true))
+        }
+    }
+
+    func isEligible(_ pkg: OutdatedPackage) -> Bool {
+        Eligibility.isEligible(
+            pkg, minAge: settings.minAgeHours * 3600,
+            securityMinAge: settings.securityMinAgeHours * 3600, firstSeen: firstSeen, now: clock)
+    }
+
+    func age(of pkg: OutdatedPackage) -> TimeInterval { Eligibility.age(of: pkg, firstSeen: firstSeen) }
+    func referenceDate(of pkg: OutdatedPackage) -> Date? { Eligibility.referenceDate(for: pkg, firstSeen: firstSeen) }
+
+    /// MacUp's own Homebrew cask when it is outdated. Only meaningful for Homebrew installs; a direct
+    /// install is updated by Sparkle, so a stray cask is ignored there.
+    var selfCaskUpdate: OutdatedPackage? {
+        guard installSource == .homebrew else { return nil }
+        guard let cask = packages.first(where: { $0.manager == .brew && $0.name == "macup" }) else { return nil }
+        // Homebrew compares against the version it recorded when it installed, which is not always what
+        // is running: a copy replaced by hand is newer than the Caskroom thinks. Never offer an update
+        // that the running app already is.
+        return Version.isNewer(cask.latest, than: appVersion) ? cask : nil
+    }
+
+    static func isSelfCask(_ p: OutdatedPackage) -> Bool { p.manager == .brew && p.name == "macup" }
+
+    /// Installs what is ready, at most once per chosen interval. Called after a scan, so it follows the
+    /// same schedule as checking.
+    var autoUpdateIsDue: Bool {
+        guard settings.autoUpdate, !isUpgradingAnything, !isCommandLine else { return false }
+        let interval = max(1, settings.autoUpdateIntervalHours) * 3600
+        if let lastAutoUpdate, Date().timeIntervalSince(lastAutoUpdate) < interval { return false }
+        return !eligible.isEmpty || selfCaskUpdate != nil
+    }
+
     var hiddenSystemCount: Int { settings.hideSystemPackages ? packages.filter(\.isSystem).count : 0 }
 
     var ignored: [OutdatedPackage] { packages.filter { settings.ignoredPackages.contains($0.id) } }

@@ -47,14 +47,23 @@ final class History {
 
     init(directory: URL) {
         url = directory.appendingPathComponent("history.json")
-        if let data = try? Data(contentsOf: url),
-            let saved = try? JSONDecoder.iso.decode([ActionRecord].self, from: data)
-        {
-            records = saved
+        if load() {
             // Writing back matters: otherwise a user who never acts again keeps week-old output on
             // disk for good, and pays to decode it at every launch.
             if dropExpiredOutput() { save() }
         }
+    }
+
+    /// Reads the file again, for records another MacUp process (the command line) added.
+    func reload() { load() }
+
+    @discardableResult
+    private func load() -> Bool {
+        guard let data = try? Data(contentsOf: url),
+            let saved = try? JSONDecoder.iso.decode([ActionRecord].self, from: data)
+        else { return false }
+        records = saved
+        return true
     }
 
     func add(_ record: ActionRecord) { add([record]) }
