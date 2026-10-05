@@ -95,6 +95,14 @@ struct MenuBarLabel: View {
     private static func symbol(_ name: String) -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
         let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)!.withSymbolConfiguration(config)!
+        // At 18 points the symbol's image is 22 points tall, the full thickness of the menu bar, but the bar
+        // only draws within a point of each edge, so the circle came out flattened at the top and bottom.
+        // Scale it down to fit when it is too tall.
+        let maxHeight = NSStatusBar.system.thickness - 2
+        if image.size.height > maxHeight {
+            let scale = maxHeight / image.size.height
+            image.size = NSSize(width: image.size.width * scale, height: maxHeight)
+        }
         image.isTemplate = true
         return image
     }
