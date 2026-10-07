@@ -275,14 +275,16 @@ final class UpgradeFlowTests: StubScriptCase {
                 MenuBarPanel().environment(store).environment(settings),
                 size: CGSize(width: 320, height: 420), settle: 0.4))
 
-        // The icon of each row is a filled accent circle, so the leftmost tinted pixel of each band of
-        // rows is where that row starts.
+        // The icon of each row is a filled accent circle, so the leftmost pixel of its fill in each band
+        // of rows is where that row starts. The fill is read from an icon drawn on its own rather than
+        // assumed to be blue, so the test holds whatever accent colour the Mac is set to.
+        let fill = try XCTUnwrap(iconFill())
         var starts: [Int] = []
         var run: Int?
         for y in 0..<rep.pixelsHigh {
             let left = (0..<rep.pixelsWide).first { x in
                 guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { return false }
-                return c.alphaComponent > 0.9 && c.blueComponent > 0.6 && c.redComponent < 0.5
+                return c.alphaComponent > 0.9 && c == fill
             }
             switch (left, run) {
             case (let l?, let current): run = min(l, current ?? l)
@@ -296,6 +298,25 @@ final class UpgradeFlowTests: StubScriptCase {
 
         XCTAssertEqual(starts.count, 3, "one icon per row: the app update and two packages")
         XCTAssertEqual(Set(starts).count, 1, "all rows start at the same x, got \(starts)")
+    }
+
+    /// The colour a row icon is filled with: the most common opaque colour of one drawn on its own, since
+    /// the circle covers far more of it than the symbol does.
+    private func iconFill() -> NSColor? {
+        guard
+            let rep = renderBitmap(
+                IconCircle(symbol: "shippingbox.fill", tint: .accentColor),
+                size: CGSize(width: 30, height: 30))
+        else { return nil }
+        var counts: [NSColor: Int] = [:]
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide {
+                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), c.alphaComponent > 0.9
+                else { continue }
+                counts[c, default: 0] += 1
+            }
+        }
+        return counts.max { $0.value < $1.value }?.key
     }
 
     func testADirectCopyIgnoresAStrayCask() {
