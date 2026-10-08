@@ -284,7 +284,7 @@ final class UpgradeFlowTests: StubScriptCase {
         for y in 0..<rep.pixelsHigh {
             let left = (0..<rep.pixelsWide).first { x in
                 guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { return false }
-                return c.alphaComponent > 0.9 && c == fill
+                return c.alphaComponent > 0.9 && sameColour(c, fill)
             }
             switch (left, run) {
             case (let l?, let current): run = min(l, current ?? l)
@@ -317,6 +317,23 @@ final class UpgradeFlowTests: StubScriptCase {
             }
         }
         return counts.max { $0.value < $1.value }?.key
+    }
+
+    /// Whether two pixels are the same colour, allowing for rounding.
+    ///
+    /// The fill is not one exact value even within a single render. Measured on a Mac with the graphite
+    /// accent: of the opaque pixels in the panel, 6,763 matched the reference fill exactly and 19 more,
+    /// all inside the three icons, sat one 8-bit step away, the same fill rounded the other way. The
+    /// reference icon is a separate render and can round one step on its own, so two steps covers both.
+    /// Nothing else in the panel came within two steps of the fill, so this admits no pixel that is not
+    /// an icon. Exact equality held there only because the leftmost pixel of each icon happened to
+    /// round the same way; Increase Contrast or another display colour space could change that.
+    private func sameColour(_ a: NSColor, _ b: NSColor) -> Bool {
+        let step: CGFloat = 1 / 255
+        let tolerance = 2 * step
+        return abs(a.redComponent - b.redComponent) <= tolerance
+            && abs(a.greenComponent - b.greenComponent) <= tolerance
+            && abs(a.blueComponent - b.blueComponent) <= tolerance
     }
 
     func testADirectCopyIgnoresAStrayCask() {
