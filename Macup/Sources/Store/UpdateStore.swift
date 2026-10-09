@@ -260,8 +260,8 @@ final class UpdateStore {
         await updateSelf(quiet: true)
     }
 
-    /// Upgrades one package at a time so each row gets its own result, then rescans once. What is upgraded
-    /// is what is ready bar casks that need sudo (left for Terminal), or `candidates` (the command line's).
+    /// One package at a time, each leaving the list once it succeeds, then a rescan per manager. What is
+    /// upgraded is what is ready bar casks that need sudo (left for Terminal), or `candidates` (the CLI's).
     func upgradeAll(managers: [Manager], candidates: [OutdatedPackage]? = nil) async {
         let grouped = Dictionary(grouping: candidates ?? eligible.filter { !updatesInTerminal($0) }, by: \.manager)
         for manager in managers where !(manager.opensExternally && managers.count > 1) {
@@ -279,6 +279,7 @@ final class UpdateStore {
                 upgrading.insert(item.id)
                 await runUpgrade(manager: manager, packages: [item])
                 upgrading.remove(item.id)
+                if failures[item.id] == nil { packages.removeAll { $0.id == item.id } }
             }
             await rescanAfterUpgrade(manager)
         }
@@ -319,9 +320,8 @@ final class UpdateStore {
         await updateSelf(unattended: true)
     }
 
-    /// Confirms what one manager has left to do, as soon as it is done rather than once the whole batch
-    /// is. Updating twenty packages used to leave every one of them on the list until the last manager
-    /// finished; now each manager's packages leave as it completes, which is the progress being watched.
+    /// Confirms what one manager has left to do as soon as it is done, rather than once the whole batch is:
+    /// it brings back anything that only looked upgraded and drops what upgraded along with it.
     private func rescanAfterUpgrade(_ manager: Manager) async {
         // Keep the manager locked until its rescan finishes. Otherwise scan() can start an automatic
         // batch in the middle of this batch and update the remaining packages a second time.
