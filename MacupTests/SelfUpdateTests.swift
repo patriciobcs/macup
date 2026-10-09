@@ -93,7 +93,23 @@ final class SelfUpdateTests: StubScriptCase {
         XCTAssertTrue(store.needsAdmin(.rustup), "this manager would prompt for a password")
         XCTAssertEqual(store.eligible.count, 1, "it is ready, and still offered to the user")
         XCTAssertEqual(store.history.records, [], "but nothing was installed behind a password prompt")
-        XCTAssertNotNil(store.lastAutoUpdate, "the run happened, it just had nothing it could do")
+        XCTAssertNil(store.lastAutoUpdate, "a run with nothing it could do must not hold the next one back")
+    }
+
+    func testOnlyWhatAnUnattendedRunWouldInstallMakesOneDue() {
+        // The interval used to be spent on a run that could install nothing, so the next real update
+        // waited a whole day. The scheduler also scans as soon as a run is due, so a false "due" would
+        // rescan every few minutes.
+        settings.autoUpdate = true
+        let store = store()
+        var sudoCask = pkg("installer-app", manager: .brew, kind: "cask")
+        sudoCask.extra = "admin"
+        store.loadFixture(reports: [], packages: [pkg("Tahoe", manager: .macos), sudoCask], log: "")
+        XCTAssertEqual(store.eligible.count, 2, "both are ready for the user")
+        XCTAssertFalse(store.autoUpdateIsDue, "but one is a System Settings hand-off and one needs a password")
+
+        store.loadFixture(reports: [], packages: [pkg("Tahoe", manager: .macos), pkg("lodash")], log: "")
+        XCTAssertTrue(store.autoUpdateIsDue, "an ordinary package is something to do")
     }
 
     func testAnUpdateTheRunningCopyAlreadyIsIsNotOffered() {

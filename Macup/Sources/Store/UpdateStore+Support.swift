@@ -52,7 +52,10 @@ extension UpdateStore {
         guard settings.autoUpdate, !isUpgradingAnything, !isCommandLine else { return false }
         let interval = max(1, settings.autoUpdateIntervalHours) * 3600
         if let lastAutoUpdate, Date().timeIntervalSince(lastAutoUpdate) < interval { return false }
-        return !eligible.isEmpty || selfCaskUpdate != nil
+        // Only what an unattended run would really install: anything left for System Settings or behind a
+        // password would spend the interval on nothing and hold back the next real update a whole day.
+        if eligible.contains(where: { !$0.manager.opensExternally && !needsAdmin($0) }) { return true }
+        return selfCaskUpdate.map { isEligible($0) && !needsAdmin($0) } ?? false
     }
 
     var hiddenSystemCount: Int { settings.hideSystemPackages ? packages.filter(\.isSystem).count : 0 }

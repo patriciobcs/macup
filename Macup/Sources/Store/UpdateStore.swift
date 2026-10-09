@@ -133,13 +133,13 @@ final class UpdateStore {
             var nextScan = Date()
             while !Task.isCancelled {
                 guard let self else { return }
-                if Date() >= nextScan {
+                if Date() >= nextScan || self.autoUpdateIsDue {
                     await self.scan()
                     nextScan = Date().addingTimeInterval(max(0.25, self.settings.checkIntervalHours) * 3600)
                 }
                 self.clock = Date()
-                // Wake every five minutes so a package crossing its minimum age shows up without a new scan,
-                // and so a shorter check interval chosen in Settings takes effect soon.
+                // Wake every five minutes so a package crossing its minimum age shows up, an automatic run
+                // starts (with a fresh scan) once it is due, and a shorter check interval takes effect soon.
                 try? await Task.sleep(for: .seconds(300))
             }
         }
