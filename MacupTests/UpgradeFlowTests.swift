@@ -328,9 +328,11 @@ final class UpgradeFlowTests: StubScriptCase {
     /// Nothing else in the panel came within two steps of the fill, so this admits no pixel that is not
     /// an icon. Exact equality held there only because the leftmost pixel of each icon happened to
     /// round the same way; Increase Contrast or another display colour space could change that.
+    /// Later, in dark mode with the blue accent, the app update row's icon (inside a button) came out at
+    /// alpha 0.910 against the reference's 0.902, which put its red 2.1 steps away: hence three.
     private func sameColour(_ a: NSColor, _ b: NSColor) -> Bool {
         let step: CGFloat = 1 / 255
-        let tolerance = 2 * step
+        let tolerance = 3 * step
         return abs(a.redComponent - b.redComponent) <= tolerance
             && abs(a.greenComponent - b.greenComponent) <= tolerance
             && abs(a.blueComponent - b.blueComponent) <= tolerance
