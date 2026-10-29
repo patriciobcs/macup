@@ -78,6 +78,12 @@ struct MenuBarLabel: View {
     let updates: Int
     let showCount: Bool
 
+    /// Bumped when the displays change or the Mac wakes. The menu bar draws the label for the bar as it is at
+    /// that moment and nothing draws it again, so after a wake or a display change it could stay cropped at the
+    /// top and bottom until the app was relaunched. A new identity draws it again, and `symbol` re-reads the
+    /// bar's thickness.
+    @State private var redraws = 0
+
     var body: some View {
         HStack(spacing: 3) {
             // Outline when everything is current, filled when updates are waiting.
@@ -89,8 +95,19 @@ struct MenuBarLabel: View {
                     .monospacedDigit()
             }
         }
+        .id(redraws)
         .help(updates == 0 ? "Everything is up to date" : "\(updates) updates ready")
+        .onReceive(Self.screensChanged) { _ in redraws += 1 }
+        .onReceive(Self.didWake) { _ in redraws += 1 }
+        .onReceive(Self.screensDidWake) { _ in redraws += 1 }
     }
+
+    private static let screensChanged = NotificationCenter.default.publisher(
+        for: NSApplication.didChangeScreenParametersNotification)
+    private static let didWake = NSWorkspace.shared.notificationCenter.publisher(
+        for: NSWorkspace.didWakeNotification)
+    private static let screensDidWake = NSWorkspace.shared.notificationCenter.publisher(
+        for: NSWorkspace.screensDidWakeNotification)
 
     private static func symbol(_ name: String) -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: 18, weight: .regular)
