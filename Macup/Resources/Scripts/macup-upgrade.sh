@@ -30,6 +30,7 @@ export PATH
 export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1 npm_config_update_notifier=false CI=1
 
 source "${0:A:h}/macup-commands.sh"
+source "${0:A:h}/macup-pip.sh"
 
 (( $# >= 1 )) || { echo "usage: $0 <manager> [name ...]" >&2; exit 64; }
 manager=$1; shift
@@ -54,8 +55,8 @@ fill() { macup_fill "$(macup_cmd $1 $2)" "${@:3}" }
 # q <word ...> — the words as one shell-quoted list, so a package name can never become a command.
 q() { print -r -- "${(j: :)${(q)@}}" }
 
-# pip on a PEP 668 "externally managed" Python (Homebrew's) refuses changes until told the user knows.
-# The package is already there, so retry with the flag when pip asks for it.
+# pip-owned packages can live in a PEP 668 Python. Brew-owned distributions are checked before
+# reaching this function, so the retry never tries to replace Homebrew's bundled pip.
 pip_run_cmd() {
   local cap; cap=$(mktemp "${TMPDIR:-/tmp}/macup-pip.XXXXXX")
   run_cmd "$1" 2>&1 | tee "$cap"; local st=$pipestatus[1]
@@ -145,7 +146,12 @@ case "$manager" in
     rc=0
     for n in "${names[@]}"; do
       # Packages living in the user site (pip install --user) must be upgraded there too.
-      loc=$($py show "$n" 2>/dev/null | sed -n 's/^Location: //p')
+      metadata=$($py show "$n" 2>/dev/null)
+      loc=$(print -r -- "$metadata" | sed -n 's/^Location: //p')
+      version=$(print -r -- "$metadata" | sed -n 's/^Version: //p')
+      if macup_pip_is_brew_owned "$loc" "$n" "$version"; then
+        macup_pip_brew_message "$n"; rc=1; continue
+      fi
       user=""; [[ "$loc" == "$HOME/Library/Python/"* || "$loc" == "$HOME/.local/lib/"* ]] && user=--user
       pip_run_cmd "$(fill update pip "python=$py" "user=$user" "name=$(q $n)")" || rc=1
     done

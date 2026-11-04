@@ -43,6 +43,7 @@ export npm_config_update_notifier=false
 
 # The binary behind a manager, where the names differ. Empty means there is nothing to ask.
 source "${0:A:h}/macup-commands.sh"
+source "${0:A:h}/macup-pip.sh"
 
 tool_of() { case "$1" in nix) print nix-env ;; tools|macos) print "" ;; *) print "$1" ;; esac }
 # M<tab>manager<tab>status<tab>message<tab>version. The version travels with every manager that is
@@ -304,6 +305,8 @@ scan_pip() {
   printf '%s\n' "$out" | awk '{ gsub(/\},[[:space:]]*\{/, "}\n{"); print }' | \
     sed -nE 's/.*"name": *"([^"]*)".*"version": *"([^"]*)".*"latest_version": *"([^"]*)".*/\1\t\2\t\3/p' | \
   while IFS=$'\t' read -r name cur latest; do
+    # Homebrew updates its bundled Python packages with the formula, not through PyPI.
+    macup_pip_is_brew_owned "$site" "$name" "$cur" && continue
     # dist-info (or older egg-info) folder: name is normalised (dashes/dots → underscores, any case).
     local norm=${name//[-.]/_}
     info=("$site"/(#i)${norm}-$cur.dist-info(N) "$site"/(#i)${name}-$cur.dist-info(N) "$site"/(#i)${norm}-$cur*.egg-info(N) "$site"/(#i)${name}-$cur*.egg-info(N))

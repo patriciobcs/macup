@@ -81,6 +81,59 @@ got=$(MACUP_USER_PATH="$stubs" "$UP" brew cask:docker-desktop 2>&1); rc=$?
 (( rc == 1 )) && ok "a cask refused sudo still fails" || bad "a cask refused sudo still fails" "exit $rc"
 [[ "$got" == *"Run it in Terminal: brew upgrade --cask -- docker-desktop"* ]] \
   && ok "and says how to finish it in Terminal" || bad "and says how to finish it in Terminal" "got: ${got//$'\n'/ | }"
+
+# --- pip: Homebrew's bundled distributions are writable, but pip does not own them ----------------
+mkdir -p "$stubs/site-packages/pip-26.2.2.dist-info" "$stubs/site-packages/requests-2.28.0.dist-info"
+print brew > "$stubs/site-packages/pip-26.2.2.dist-info/INSTALLER"
+print pip > "$stubs/site-packages/requests-2.28.0.dist-info/INSTALLER"
+touch "$stubs/site-packages/requests-2.28.0.dist-info/RECORD"
+cat > "$stubs/pip3" <<'PIP'
+#!/bin/zsh
+case "$1" in
+  show)
+    print "Location: $PIP_SITE"
+    [[ "$2" == pip ]] && print 'Version: 26.2.2' || print 'Version: 2.28.0'
+    ;;
+  list) print '[{"name":"pip","version":"26.2.2","latest_version":"26.3"},{"name":"requests","version":"2.28.0","latest_version":"2.32.0"}]' ;;
+  install|uninstall)
+    print -r -- "$*" >> "$PIP_CALLS"
+    [[ "$*" == *--break-system-packages* ]] && exit 0
+    print 'error: externally-managed-environment' >&2
+    exit 1
+    ;;
+esac
+PIP
+chmod +x "$stubs/pip3"
+export PIP_SITE="$stubs/site-packages" PIP_CALLS="$stubs/pip-calls"
+got=$(MACUP_USER_PATH="$stubs" "$UP" pip pip 2>&1); rc=$?
+[[ $rc == 1 && "$got" == *"Homebrew manages pip"* && ! -e "$PIP_CALLS" ]] \
+  && ok "brew-owned pip is refused before any install or retry" \
+  || bad "brew-owned pip is refused before any install or retry" "exit $rc; got: $got"
+got=$(MACUP_USER_PATH="$stubs" Macup/Resources/Scripts/macup-remove.sh pip pip 2>&1); rc=$?
+[[ $rc == 1 && "$got" == *"Homebrew manages pip"* && ! -e "$PIP_CALLS" ]] \
+  && ok "brew-owned pip cannot be removed through pip" \
+  || bad "brew-owned pip cannot be removed through pip" "exit $rc; got: $got"
+got=$(MACUP_USER_PATH="$stubs" "$UP" pip 2>&1); rc=$?
+calls=$(cat "$PIP_CALLS" 2>/dev/null)
+[[ "$got" == *"Homebrew manages pip"* && "$calls" == *'requests --break-system-packages'* && "$calls" != *'check pip'* ]] \
+  && ok "update all skips bundled pip and still updates pip-owned packages" \
+  || bad "update all skips bundled pip and still updates pip-owned packages" "exit $rc; calls: $calls; got: $got"
+# A pip-installed copy of pip is updatable, even though the package name is identical.
+print pip > "$PIP_SITE/pip-26.2.2.dist-info/INSTALLER"
+got=$(MACUP_USER_PATH="$stubs" "$UP" pip pip 2>&1); rc=$?
+[[ $rc == 0 && "$got" == *'pip --break-system-packages'* ]] \
+  && ok "pip-owned pip keeps its normal update path" \
+  || bad "pip-owned pip keeps its normal update path" "exit $rc; got: $got"
+got=$(MACUP_USER_PATH="$stubs" Macup/Resources/Scripts/macup-remove.sh pip requests 2>&1); rc=$?
+[[ $rc == 0 && "$got" == *'uninstall -y requests --break-system-packages'* ]] \
+  && ok "pip-owned packages keep their removal path" \
+  || bad "pip-owned packages keep their removal path" "exit $rc; got: $got"
+got=$(HOME="$stubs/home" PIP_SITE="$stubs/home/.local/lib/python3.15/site-packages" \
+  MACUP_USER_PATH="$stubs" "$UP" pip requests 2>&1); rc=$?
+[[ $rc == 0 && "$got" == *'--user requests --break-system-packages'* ]] \
+  && ok "user-site packages are still updated in the user site" \
+  || bad "user-site packages are still updated in the user site" "exit $rc; got: $got"
+unset PIP_SITE PIP_CALLS
 rm -rf "$stubs"
 
 print -P "\n%F{blue}upgrade script:%f $pass passed, $fail failed"

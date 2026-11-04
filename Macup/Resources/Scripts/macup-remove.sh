@@ -29,6 +29,7 @@ export PATH
 export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR=1 npm_config_update_notifier=false CI=1
 
 source "${0:A:h}/macup-commands.sh"
+source "${0:A:h}/macup-pip.sh"
 
 (( $# >= 2 )) || { echo "usage: $0 <manager> <name> [kind]" >&2; exit 64; }
 manager=$1; name=$2; kind=${3:-}
@@ -50,8 +51,7 @@ run_cmd() {
 # remove_cmd <manager> [key=value ...] — the resolved, filled-in removal command for this manager.
 remove_cmd() { macup_fill "$(macup_cmd remove $1)" "name=${(q)name}" "${@:2}" }
 
-# pip on a PEP 668 "externally managed" Python (Homebrew's) refuses changes until told the user knows.
-# The package is already there, so retry with the flag when pip asks for it.
+# Retry PEP 668 only for packages not owned by Homebrew (checked before calling this function).
 pip_run_cmd() {
   local cap; cap=$(mktemp "${TMPDIR:-/tmp}/macup-pip.XXXXXX")
   run_cmd "$1" 2>&1 | tee "$cap"; local st=$pipestatus[1]
@@ -96,7 +96,16 @@ case "$manager" in
   npm)    run_cmd "$(remove_cmd npm)" ;;
   bun)    run_cmd "$(remove_cmd bun)" ;;
   pnpm)   run_cmd "$(remove_cmd pnpm)" ;;
-  pip)    py=pip3; command -v pip3 >/dev/null 2>&1 || py=pip; pip_run_cmd "$(remove_cmd pip "python=$py")" ;;
+  pip)
+    py=pip3; command -v pip3 >/dev/null 2>&1 || py=pip
+    metadata=$($py show "$name" 2>/dev/null)
+    loc=$(print -r -- "$metadata" | sed -n 's/^Location: //p')
+    version=$(print -r -- "$metadata" | sed -n 's/^Version: //p')
+    if macup_pip_is_brew_owned "$loc" "$name" "$version"; then
+      print -r -- "→ Homebrew manages $name; it cannot be removed independently of its Python formula."
+      exit 1
+    fi
+    pip_run_cmd "$(remove_cmd pip "python=$py")" ;;
   uv)     run_cmd "$(remove_cmd uv)" ;;
   cargo)  run_cmd "$(remove_cmd cargo)" ;;
   pipx)     run_cmd "$(remove_cmd pipx)" ;;

@@ -296,6 +296,21 @@ check "brew: so does one with a system file to remove" "$out" "P	brew	some/tap/h
 check "brew: a cask whose sudo steps are only in zap, or not on this Mac, does not" "$out" "P	brew	plain	1.0	2.0	cask		"
 check "brew: and formulae are never marked" "$out" "P	brew	jq	1.6	1.7.1	formula		"
 
+# --- pip: installer metadata, rather than writable directories, determines ownership ---------------
+pips="$stubs/python/site-packages"
+mkdir -p "$pips/pip-26.2.2.dist-info" "$pips/requests-2.28.0.dist-info"
+print brew > "$pips/pip-26.2.2.dist-info/INSTALLER"
+print pip > "$pips/requests-2.28.0.dist-info/INSTALLER"
+stub brewedpip '[[ "$1" == --version ]] && { echo "pip 26.2.2 from $PIP_SITE/pip (python 3.15)"; exit 0 }
+echo "[{\"name\":\"pip\",\"version\":\"26.2.2\",\"latest_version\":\"26.3\"},{\"name\":\"requests\",\"version\":\"2.28.0\",\"latest_version\":\"2.32.0\"}]"' pip3
+out=$(run brewedpip PIP_SITE="$pips" zsh "$SCAN" pip 2>/dev/null)
+check "pip: a pip-owned package in Homebrew Python remains updatable" "$out" $'P\tpip\trequests\t2.28.0\t2.32.0\tpackage'
+[[ "$out" != *$'P\tpip\tpip\t'* ]] && ok "pip: Homebrew-owned pip is not offered as a PyPI update" \
+  || bad "pip: Homebrew-owned pip is not offered as a PyPI update" "got: $out"
+print pip > "$pips/pip-26.2.2.dist-info/INSTALLER"
+out=$(run brewedpip PIP_SITE="$pips" zsh "$SCAN" pip 2>/dev/null)
+check "pip: pip installed by pip is still offered" "$out" $'P\tpip\tpip\t26.2.2\t26.3\tpackage'
+
 # --- macOS: a busy update daemon falls back to the list macOS keeps in its preferences -------------
 stub sustall 'sleep 30' softwareupdate
 plist=$(mktemp -d)/su.plist
