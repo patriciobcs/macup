@@ -93,9 +93,22 @@ enum CommandLineTool {
             }
             pool.removeAll { store.needsAdmin($0) }
         }
-        // macOS updates are a hand-off to System Settings, run only when asked for by name.
+        // Native updaters need an explicit action. gcloud's Python installer must run directly in a
+        // terminal; this CLI captures subprocess output, so show the guarded command instead.
+        if pool.contains(where: { $0.manager == .gcloud }), targets.contains(.gcloud), !request.dryRun {
+            print("Google Cloud CLI updates may install system Python; use Update in Terminal in MacUp.")
+            if request.managers == [.gcloud],
+                let package = pool.first(where: { $0.manager == .gcloud }),
+                let command = await ScriptRunner.interactiveUpgradeCommand(package)
+            {
+                print("Or run directly in Terminal:\n\(command)")
+                return 0
+            }
+        }
         let candidates = pool.filter {
-            targets.contains($0.manager) && (!$0.manager.opensExternally || request.managers == [$0.manager])
+            targets.contains($0.manager)
+                && ($0.manager != .gcloud || request.dryRun)
+                && (!$0.manager.opensExternally || request.managers == [$0.manager])
         }
         guard !candidates.isEmpty else {
             let waiting = store.waiting.filter { targets.contains($0.manager) }.count

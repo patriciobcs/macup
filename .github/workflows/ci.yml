@@ -48,6 +48,8 @@ jobs:
               - 'MacupTests/**'
               - 'tests/scan/**'
               - 'tests/upgrade/**'
+              - 'tests/gem/**'
+              - 'tests/mas/**'
               - 'tests/release/**'
               - 'tests/cli/**'
               - 'project.yml'

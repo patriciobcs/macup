@@ -10,7 +10,10 @@ setopt NULL_GLOB 2>/dev/null
 for d in "$HOME/.bun/bin" "$HOME/.cargo/bin" "$HOME/.local/bin" /opt/homebrew/bin /opt/homebrew/sbin /usr/local/bin \
          "$HOME"/.nvm/versions/node/*/bin "$HOME"/.volta/bin "$HOME"/Library/pnpm "$HOME"/Library/pnpm/bin "$HOME"/.local/share/pnpm "$HOME"/.local/share/pnpm/bin "${PNPM_HOME:-/nonexistent}" "${PNPM_HOME:-/nonexistent}/bin" "$HOME"/.hermes/node/bin \
          "$HOME"/.fnm/aliases/default/bin "$HOME"/Library/Application\ Support/fnm/aliases/default/bin \
-         /Library/Frameworks/Python.framework/Versions/Current/bin "$HOME"/.pyenv/shims "$HOME"/.rbenv/shims; do
+         /Library/Frameworks/Python.framework/Versions/Current/bin "$HOME"/.pyenv/shims "$HOME"/.rbenv/shims \
+         "$HOME/google-cloud-sdk/bin" /usr/local/google-cloud-sdk/bin /opt/google-cloud-sdk/bin \
+         /opt/homebrew/share/google-cloud-sdk/bin /usr/local/share/google-cloud-sdk/bin \
+         /Applications/Tailscale.app/Contents/MacOS "$HOME/Applications/Tailscale.app/Contents/MacOS"; do
   [[ -d "$d" && ":$PATH:" != *":$d:"* ]] && PATH="$PATH:$d"
 done
 export PATH
@@ -31,6 +34,8 @@ export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR
 
 source "${0:A:h}/macup-commands.sh"
 source "${0:A:h}/macup-pip.sh"
+source "${0:A:h}/macup-gem.sh"
+source "${0:A:h}/macup-native-tools.sh"
 
 (( $# >= 1 )) || { echo "usage: $0 <manager> [name ...]" >&2; exit 64; }
 manager=$1; shift
@@ -87,11 +92,17 @@ as_admin() {
   osascript -e "do shell script \"PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/local/bin $cmd 2>&1\" with administrator privileges"
 }
 
-# gem: elevate only when the gem directory is not writable (system Ruby).
+# Elevate only Apple's actual system Ruby, never a different Ruby or a Homebrew-owned gem.
 gem_run() {
-  local dir; dir=$(gem environment gemdir 2>/dev/null)
-  # An unwritable gem dir means the system Ruby: elevate Apple's /usr/bin/gem, never a shim from PATH.
-  if [[ -n "$dir" && ! -w "$dir" ]]; then as_admin /usr/bin/gem "$@"; else run gem "$@"; fi
+  local name=$1; macup_gem_context "$name"
+  macup_gem_is_brew_owned "$name" && { macup_gem_brew_message "$name"; return 1; }
+  local dir=$MACUP_GEM_TARGET
+  if [[ -n "$dir" && ! -w "$dir" ]]; then
+    if [[ -z "$MACUP_GEM_USER_FLAG" ]] && macup_gem_is_system_ruby; then as_admin /usr/bin/gem update "$name"
+    else print -r -- "→ $dir is not writable; update $name using the Ruby installation that owns it."; return 1; fi
+  else
+    run gem update ${MACUP_GEM_USER_FLAG:+$MACUP_GEM_USER_FLAG} "$name"
+  fi
 }
 
 case "$manager" in
@@ -185,6 +196,27 @@ case "$manager" in
   macos)
     # System updates need a restart and an administrator; hand off to System Settings.
     run_cmd "$(fill update macos)" ;;
+  tailscale|gcloud)
+    if [[ "${MACUP_DRY_RUN:-0}" != 1 ]]; then
+      owner=$(native_tool_owner "$manager") && { print -r -- "→ $owner manages $manager; update it there."; exit 1; }
+      if [[ "$manager" == gcloud ]]; then
+        # Google's component updater can run a system Python installer. Keep its prompts visible and
+        # never run it unattended, even when called directly rather than through the app.
+        if [[ ! -t 0 || ! -t 1 ]]; then
+          print -r -- "→ Google Cloud CLI updates may install system Python; run this update in Terminal."
+          exit 1
+        fi
+        print -r -- "→ Google Cloud CLI may install or update system Python as part of this SDK update."
+        root=$(gcloud info --format='value(installation.sdk_root)' 2>/dev/null)
+        gcloud_updater_disabled "$root" && { print -r -- "→ Component updates are disabled; use the installer that manages this SDK."; exit 1; }
+        # Google requires the working directory to be outside the SDK while it replaces components.
+        cd "${TMPDIR:-/tmp}" || exit 1
+      else
+        variant=$(tailscale version --json 2>/dev/null | tr '{,' '\n\n' | sed -nE 's/^[[:space:]]*"osVariant"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p')
+        [[ "$variant" == macsys ]] || { print -r -- "→ This Tailscale installation must be updated by its original installer or the App Store."; exit 1; }
+      fi
+    fi
+    run_cmd "$(fill update "$manager")" ;;
   tools)
     rc=0
     # Each tool's own updater first; if it fails (GitHub API rate limits are common), the official installer.
@@ -223,7 +255,13 @@ case "$manager" in
   # These two can end up running with administrator privileges, and what runs as root is never taken
   # from a setting: only a root-owned executable this script names itself is elevated.
   gem)
-    if (( ${#names} )); then gem_run update "${names[@]}"; else gem_run update; fi ;;
+    macup_gem_setup
+    if (( ${#names} == 0 )); then
+      outdated=$(gem outdated) || exit $?
+      names=($(print -r -- "$outdated" | sed -nE 's/^([A-Za-z0-9_.-]+) \(.*/\1/p'))
+    fi
+    rc=0; for n in "${names[@]}"; do gem_run "$n" || rc=1; done
+    exit $rc ;;
   port)
     if (( ${#names} )); then as_admin /opt/local/bin/port -N upgrade "${names[@]}"; else as_admin /opt/local/bin/port -N upgrade outdated; fi ;;
   *) echo "unknown manager: $manager" >&2; exit 64 ;;

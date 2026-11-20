@@ -34,11 +34,14 @@ expect conda ok 1
 expect mise ok 1
 expect tools ok 3
 expect nix missing 0
+expect gcloud ok 1
+expect tailscale missing 0   # the native updater is for the macOS app
 
 echo "===== dry-run upgrades"
-for m in npm bun pnpm pip pipx uv cargo rustup go gem composer conda mise tools nix; do
+for m in npm bun pnpm pip pipx uv cargo rustup go gem composer conda mise tools nix gcloud tailscale; do
   names=$(printf '%s\n' "$out" | awk -F'\t' -v m="$m" '$1=="P" && $2==m {print $3}' | head -n2 | tr '\n' ' ')
   [[ "$m" == go ]] && names=$(printf '%s\n' "$out" | awk -F'\t' -v m="$m" '$1=="P" && $2==m {split($7,a,"|"); print a[2]}' | head -n1)
+  [[ "$m" == gem ]] && names=rake   # the pinned user gem, rather than Linux's system gems
   res=$(MACUP_DRY_RUN=1 MACUP_USER_PATH="$PATH" ./scripts/macup-upgrade.sh $m ${=names} 2>&1); r=$?
   if (( r == 0 )); then echo "ok   $m: $res" | head -n2; else echo "FAIL $m upgrade dry-run exit $r: $res"; fail=1; fi
 done

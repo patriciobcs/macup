@@ -37,6 +37,8 @@ MACUP_CHECK[gem]='gem outdated'
 MACUP_CHECK[composer]='composer global outdated --direct --format=json'
 MACUP_CHECK[nix]='nix-env -u --dry-run'
 MACUP_CHECK[mise]='mise outdated --json'
+MACUP_CHECK[gcloud]='gcloud components list --format="value(id)"'
+MACUP_CHECK[tailscale]='tailscale version --json'
 MACUP_CHECK[mas]='mas outdated'
 
 # --- updating named packages -----------------------------------------------------------------------
@@ -60,6 +62,8 @@ MACUP_UPDATE[nix]='nix-env -u {names}'
 MACUP_UPDATE[mise]='mise upgrade {names}'
 MACUP_UPDATE[mas]='mas upgrade {names}'
 MACUP_UPDATE[macos]='open x-apple.systempreferences:com.apple.Software-Update-Settings.extension'
+MACUP_UPDATE[gcloud]='gcloud components update'
+MACUP_UPDATE[tailscale]='tailscale update'
 
 # rustup is the one manager whose own update is a different command from its packages'.
 MACUP_UPDATE[rustup_self]='rustup self update'
@@ -78,6 +82,7 @@ MACUP_UPDATE_ALL[gem]='gem update'
 MACUP_UPDATE_ALL[composer]='composer global update --no-interaction'
 MACUP_UPDATE_ALL[nix]='nix-env -u'
 MACUP_UPDATE_ALL[mise]='mise upgrade'
+MACUP_UPDATE_ALL[gcloud]='gcloud components update'
 MACUP_UPDATE_ALL[mas]='mas upgrade'
 
 # --- removing a package ------------------------------------------------------------------------------

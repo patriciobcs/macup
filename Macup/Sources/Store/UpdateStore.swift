@@ -279,12 +279,11 @@ final class UpdateStore {
                 upgrading.insert(item.id)
                 await runUpgrade(manager: manager, packages: [item])
                 upgrading.remove(item.id)
-                if failures[item.id] == nil { packages.removeAll { $0.id == item.id } }
+                if failures[item.id] == nil, !manager.opensExternally { packages.removeAll { $0.id == item.id } }
             }
             await rescanAfterUpgrade(manager)
         }
-        // MacUp updates itself last: a Homebrew upgrade relaunches the app, which would cut the rest of
-        // the batch short, and Sparkle takes over the window once it starts.
+        // MacUp updates itself last, since upgrading it can relaunch the app or open Sparkle.
     }
 
     /// Updates MacUp itself the way this copy was installed. Nothing happens when it is already current.
@@ -343,7 +342,7 @@ final class UpdateStore {
         case .success(let result):
             let status = result.status
             if status == 0 {
-                appendLog("✓ done\n")
+                appendLog(manager.opensExternally ? "✓ opened updater\n" : "✓ done\n")
             } else {
                 appendLog("✗ exited with status \(status)\n")
                 failure = Self.errorSummary(result.combined, status: status)
@@ -361,9 +360,10 @@ final class UpdateStore {
             items.enumerated().map { index, item in
                 ActionRecord(
                     kind: .upgrade, manager: manager, package: item.name,
-                    detail: failure ?? "\(item.installed) → \(item.latest)", succeeded: failure == nil,
-                    // One command covered them all, so the output hangs off the first row rather than
-                    // being stored once per package.
+                    detail: failure
+                        ?? (manager.opensExternally ? "Opened updater" : "\(item.installed) → \(item.latest)"),
+                    succeeded: failure == nil,
+                    // Keep a shared command's output on its first row.
                     output: index == 0 ? output : nil, packageID: item.id)
             })
     }

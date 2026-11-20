@@ -13,12 +13,20 @@ extension UpdateStore {
 
     /// Updating this package asks for an administrator password: its whole manager does (MacPorts,
     /// system Ruby gems), or it is a cask that runs part of its upgrade through sudo.
-    func needsAdmin(_ pkg: OutdatedPackage) -> Bool { needsAdmin(pkg.manager) || updatesInTerminal(pkg) }
+    func needsAdmin(_ pkg: OutdatedPackage) -> Bool {
+        needsAdmin(pkg.manager) || (pkg.manager == .brew && updatesInTerminal(pkg))
+    }
 
-    /// A cask that is updated in Terminal. Known from the scan, or learned from an upgrade that failed
-    /// for exactly that reason.
+    /// gcloud may install system Python. Casks need Terminal when their installer asks for a password.
     func updatesInTerminal(_ pkg: OutdatedPackage) -> Bool {
-        pkg.manager == .brew && (pkg.needsAdmin || failure(for: pkg) == Self.needsTerminalFailure)
+        pkg.manager == .gcloud
+            || (pkg.manager == .brew && (pkg.needsAdmin || failure(for: pkg) == Self.needsTerminalFailure))
+    }
+
+    func terminalUpdateHelp(_ pkg: OutdatedPackage) -> String {
+        pkg.manager == .gcloud
+            ? "Update the SDK in Terminal; Google's updater may install or update system Python"
+            : "Needs your administrator password, which Homebrew can only ask for in Terminal"
     }
 
     /// Opens the update in Terminal, where sudo asks for the password itself and MacUp never sees it.
@@ -37,7 +45,8 @@ extension UpdateStore {
 
     /// The command the upgrade script would have run, the user's own replacement included.
     private func updateCommand(_ pkg: OutdatedPackage) async -> String? {
-        await ScriptRunner.upgradeCommand(
+        if pkg.manager == .gcloud { return await ScriptRunner.interactiveUpgradeCommand(pkg) }
+        return await ScriptRunner.upgradeCommand(
             manager: pkg.manager, argument: pkg.upgradeArgument, brewGreedy: settings.brewGreedy)
     }
 }

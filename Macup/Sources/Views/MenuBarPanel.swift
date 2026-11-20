@@ -288,10 +288,7 @@ struct PanelRow: View {
                 Image(systemName: "terminal").font(.title3)
             }
             .buttonStyle(.borderless)
-            .help(
-                "Needs your administrator password, which Homebrew can only ask for in Terminal. "
-                    + "Click to update it there."
-            )
+            .help(store.terminalUpdateHelp(pkg))
             .accessibilityLabel("Update \(pkg.name) in Terminal")
         } else if let failure = store.failure(for: pkg) {
             Button {
@@ -315,10 +312,10 @@ struct PanelRow: View {
             .buttonStyle(.borderless)
             .help(
                 pkg.manager.opensExternally
-                    ? "Open Software Update in System Settings"
+                    ? pkg.manager.externalUpdateHelp
                     : dimmed ? "Update now, before the minimum age has passed" : "Update \(pkg.name)"
             )
-            .accessibilityLabel(pkg.manager.opensExternally ? "Open Software Update" : "Update \(pkg.name)")
+            .accessibilityLabel(pkg.manager.opensExternally ? pkg.manager.externalUpdateHelp : "Update \(pkg.name)")
         }
     }
 

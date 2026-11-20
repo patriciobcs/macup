@@ -70,6 +70,8 @@ It uses the menu bar app's settings, ignored packages and history, and the app s
 | MacPorts | `port outdated` | yes, admin | yes, admin | no | no |
 | Mac App Store (via `mas`) | `mas outdated` | yes | no | no | no |
 | macOS updates | `softwareupdate` | opens System Settings | no | no | no |
+| Google Cloud CLI (direct SDK install) | `gcloud components list` | SDK and components in Terminal | no | first seen | no |
+| Tailscale (standalone macOS app) | Tailscale's package feed | opens Tailscale's updater | no | first seen | no |
 | Self-installed tools (uv, Bun, Deno, pnpm, mise) | GitHub releases | self-update | no | GitHub | no |
 
 ## Privacy
@@ -85,7 +87,11 @@ MacUp has no accounts and no telemetry. To do its job it does send some of your 
 - **Self-update of tools** applies only to copies installed by their own installers. Copies from Homebrew or npm are updated by those managers. When a tool's own updater fails, MacUp runs the vendor's documented installer script over HTTPS.
 - **Very old tool versions.** Scanning relies on each manager's machine-readable output, and some of those flags are not ancient: `pnpm outdated --format json` needs pnpm 7, `bun outdated -g` needs a recent bun (older ones are read from bun's global directory instead). A manager too old for its flag reports one error that names the version it is running, and the rest of the scan carries on.
 - **pip on Homebrew's Python** refuses changes under PEP 668; MacUp retries with `--break-system-packages` and shows that in the log.
+- **Homebrew's bundled Ruby gems** stay with their Ruby formula. MacUp checks gemspec and plugin symlinks into the Cellar, even when the surrounding gem directory is writable. Separately installed gems remain updatable, and user gems stay in the user gem directory.
+- **App Store duplicates and Spotlight metadata.** MacUp checks the actual bundle versions of indexed copies before offering an update, so an old duplicate cannot repeatedly offer a version already installed on this Mac.
 - **Update All skips macOS updates** on purpose, since they need a restart. The row opens System Settings instead.
+- **Tailscale updates are manual.** The row opens Tailscale's own updater and is left out of Update All and scheduled updates. Homebrew and App Store copies stay with their original manager.
+- **Google Cloud CLI** is updated as one SDK, including its installed components such as `bq` and `gsutil`. Its row opens Terminal because Google's updater may install or update system Python; Update All and scheduled updates leave it alone. Homebrew copies stay with Homebrew; installations with the component updater disabled are left to their installer.
 - **MacUp is not sandboxed** and is distributed outside the Mac App Store, because the App Store sandbox does not allow an app to run Homebrew or npm on your behalf. See [SECURITY.md](SECURITY.md).
 
 ## Contributing

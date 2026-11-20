@@ -54,7 +54,9 @@ extension UpdateStore {
         if let lastAutoUpdate, Date().timeIntervalSince(lastAutoUpdate) < interval { return false }
         // Only what an unattended run would really install: anything left for System Settings or behind a
         // password would spend the interval on nothing and hold back the next real update a whole day.
-        if eligible.contains(where: { !$0.manager.opensExternally && !needsAdmin($0) }) { return true }
+        if eligible.contains(where: { !$0.manager.opensExternally && !needsAdmin($0) && !updatesInTerminal($0) }) {
+            return true
+        }
         return selfCaskUpdate.map { isEligible($0) && !needsAdmin($0) } ?? false
     }
 

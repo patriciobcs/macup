@@ -192,7 +192,7 @@ struct PackageRow: View {
             } else if store.updatesInTerminal(pkg) {
                 Button("Update in Terminal") { Task { await store.upgrade(pkg) } }
                     .controlSize(.small)
-                    .help("Needs your administrator password, which Homebrew can only ask for in Terminal")
+                    .help(store.terminalUpdateHelp(pkg))
             } else if let failure = store.failure(for: pkg) {
                 Button {
                     store.reveal(pkg)
@@ -203,9 +203,12 @@ struct PackageRow: View {
                 .accessibilityLabel("Update failed, show output")
                 Button("Retry") { Task { await store.upgrade(pkg) } }.controlSize(.small)
             } else {
-                Button(pkg.manager.opensExternally ? "Open Settings" : "Update") { Task { await store.upgrade(pkg) } }
+                Button(pkg.manager.updateButtonTitle) { Task { await store.upgrade(pkg) } }
                     .controlSize(.small)
-                    .help(eligible ? "Update \(pkg.name)" : "Update now, before the minimum age has passed")
+                    .help(
+                        pkg.manager.opensExternally
+                            ? pkg.manager.externalUpdateHelp
+                            : eligible ? "Update \(pkg.name)" : "Update now, before the minimum age has passed")
             }
             if pkg.manager.supportsRemoval && !store.isUpgrading(pkg) {
                 Button {

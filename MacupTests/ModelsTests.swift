@@ -89,9 +89,11 @@ final class ModelsTests: XCTestCase {
         }
     }
 
-    func testOnlyMacOSUpdatesAreAHandOff() {
+    func testMacOSAndTailscaleOpenTheirOwnUpdaters() {
         XCTAssertTrue(Manager.macos.opensExternally)
-        XCTAssertEqual(Manager.allCases.filter(\.opensExternally), [.macos])
+        XCTAssertEqual(Manager.allCases.filter(\.opensExternally), [.macos, .tailscale])
+        XCTAssertEqual(Manager.tailscale.updateButtonTitle, "Open Updater")
+        XCTAssertFalse(Manager.gcloud.opensExternally)
     }
 
     func testEveryManagerHasATitleAndAnIcon() {

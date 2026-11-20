@@ -10,6 +10,8 @@ export PNPM_HOME="$HOME/Library/pnpm"
 # Homebrew's Ruby first, so gems are user-writable on the runner.
 for d in "$(brew --prefix)"/lib/ruby/gems/*/bin(N) "$(brew --prefix)/opt/ruby/bin"; do MACUP_USER_PATH="$d:$MACUP_USER_PATH"; done
 export PATH="$MACUP_USER_PATH"
+export PATH="$HOME/google-cloud-sdk/bin:$PATH"
+export MACUP_USER_PATH="$HOME/google-cloud-sdk/bin:$MACUP_USER_PATH" CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true
 fail=0
 scan() { "$S/macup-scan.sh" "$@" 2>/dev/null; }
 status_of() { printf '%s\n' "$1" | awk -F'\t' -v m="$2" '$1=="M" && $2==m {print $3}'; }
@@ -51,6 +53,8 @@ expect_if_present composer composer 1
 expect nix missing 0
 expect mise ok 1
 expect tools ok 3
+expect gcloud ok 1
+expect_if_present tailscale tailscale 0
 # mas cannot sign in on CI; it must at least run and be parsed (ok) or fail cleanly (error).
 mas_status=$(status_of "$out" mas); [[ "$mas_status" == ok || "$mas_status" == error ]] && echo "ok   mas: $mas_status" || { echo "FAIL mas: $mas_status"; fail=1; }
 has "$out" brew jq || { echo "FAIL brew: jq not reported outdated"; fail=1; }
@@ -91,6 +95,9 @@ echo "--- rustup update (runs, nothing pinned)"; "$S/macup-upgrade.sh" rustup > 
 echo "--- macos: dry-run hand-off"; MACUP_DRY_RUN=1 "$S/macup-upgrade.sh" macos && echo "ok   macos"
 echo "--- port: dry-run (needs an admin prompt for real)"; MACUP_DRY_RUN=1 "$S/macup-upgrade.sh" port nano && echo "ok   port"
 echo "--- nix: dry-run"; MACUP_DRY_RUN=1 "$S/macup-upgrade.sh" nix && echo "ok   nix"
+# Tailscale's GUI updater requires the person at the Mac; never install or restart a VPN on CI.
+echo "--- tailscale: dry-run hand-off"; MACUP_DRY_RUN=1 "$S/macup-upgrade.sh" tailscale && echo "ok   tailscale"
+echo "--- gcloud: dry-run (its updater may install system Python)"; MACUP_DRY_RUN=1 "$S/macup-upgrade.sh" gcloud && echo "ok   gcloud"
 
 # Real removals: the package must disappear from the manager's own listing.
 remove_check() {  # manager name check-command...

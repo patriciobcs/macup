@@ -105,7 +105,8 @@ stub pnpmisolated '[[ "$1" == "--version" ]] && { echo 11.22.0; exit 0 }
 [[ "$1" == "root" ]] && { echo '"$groot"'; exit 0 }
 echo "{\"is-odd\": {\"current\": \"2.0.0\", \"latest\": \"3.0.1\"}}"; exit 1' pnpm
 out=$(run pnpmisolated zsh "$SCAN" pnpm 2>/dev/null)
-when=$(stat -f %m "$groot/12d5a-hash/node_modules/is-odd" 2>/dev/null || stat -c %Y "$groot/12d5a-hash/node_modules/is-odd")
+if [[ "$OSTYPE" == darwin* ]]; then when=$(stat -f %m "$groot/12d5a-hash/node_modules/is-odd")
+else when=$(stat -c %Y "$groot/12d5a-hash/node_modules/is-odd"); fi
 check "pnpm 11: the install time is read from the package's own folder" "$out" "P	pnpm	is-odd	2.0.0	3.0.1	global		$when"
 
 # Nothing outdated is the normal case: npm prints nothing and exits cleanly.
@@ -310,6 +311,56 @@ check "pip: a pip-owned package in Homebrew Python remains updatable" "$out" $'P
 print pip > "$pips/pip-26.2.2.dist-info/INSTALLER"
 out=$(run brewedpip PIP_SITE="$pips" zsh "$SCAN" pip 2>/dev/null)
 check "pip: pip installed by pip is still offered" "$out" $'P\tpip\tpip\t26.2.2\t26.3\tpackage'
+
+# --- native updaters: SDK bundles and GUI update hand-offs -----------------------------------------
+native="$stubs/native-sdk"
+mkdir -p "$native/lib/googlecloudsdk/core"
+stub native '[[ "$1" == list && "$2" == --cask && -n "${NATIVE_BREW_OWNER:-}" ]] && { print "$NATIVE_BREW_OWNER 1.0"; exit 0 }
+exit 1' brew
+stub native '[[ "$*" == "version --json" ]] && { print "{\"majorMinorPatch\":\"${TS_CURRENT:-1.104.2}\",\"osVariant\":\"${TS_VARIANT:-macsys}\"}"; exit 0 }
+print "${TS_CURRENT:-1.104.2}"' tailscale
+stub native '[[ "$*" == *"/${TS_TRACK:-stable}/?mode=json"* ]] || { print "wrong Tailscale track" >&2; exit 1 }
+print "{\"Version\":\"9.0.0\",\"MacZipsVersion\":\"${TS_LATEST:-1.104.5}\"}"' curl
+out=$(run native zsh "$SCAN" tailscale 2>/dev/null)
+check "Tailscale: uses the macOS package version, not another platform's release" "$out" $'P\ttailscale\tTailscale\t1.104.2\t1.104.5\tapp\tstable'
+out=$(run native TS_CURRENT=1.105.0 TS_LATEST=1.105.1 TS_TRACK=unstable zsh "$SCAN" tailscale 2>/dev/null)
+check "Tailscale: keeps an unstable installation on its track" "$out" $'P\ttailscale\tTailscale\t1.105.0\t1.105.1\tapp\tunstable'
+out=$(run native TS_CURRENT=1.104.6 zsh "$SCAN" tailscale 2>/dev/null)
+[[ "$out" != *$'P\ttailscale\t'* ]] && ok "Tailscale: a newer installed version is never downgraded" \
+  || bad "Tailscale: a newer installed version is never downgraded" "got: $out"
+out=$(run native TS_VARIANT=macappstore zsh "$SCAN" tailscale 2>/dev/null)
+check "Tailscale: leaves App Store installations with the App Store" "$out" $'M\ttailscale\tskipped\tUpdated by the App Store'
+out=$(run native NATIVE_BREW_OWNER=tailscale-app zsh "$SCAN" tailscale 2>/dev/null)
+check "Tailscale: leaves cask installations with Homebrew" "$out" $'M\ttailscale\tskipped\tUpdated by Homebrew'
+
+stub native 'case "$1" in
+  --version) print "Google Cloud SDK 591.0.0" ;;
+  info) print "$NATIVE_SDK" ;;
+  components)
+    [[ "${GCLOUD_BROKEN:-0}" == 1 ]] && { print "unexpected output"; exit 0 }
+    print "core"
+    print "Your current Google Cloud CLI version is: 591.0.0" >&2
+    print "The latest available version is: ${GCLOUD_LATEST:-592.0.0}" >&2
+    ;;
+esac' gcloud
+out=$(run native NATIVE_SDK="$native" zsh "$SCAN" gcloud 2>/dev/null)
+check "gcloud: reports the SDK as one update, covering all its installed components" "$out" $'P\tgcloud\tgcloud\t591.0.0\t592.0.0\tsdk'
+out=$(run native NATIVE_SDK="$native" GCLOUD_LATEST=591.0.0 zsh "$SCAN" gcloud 2>/dev/null)
+[[ "$out" == *$'M\tgcloud\tok'* && "$out" != *$'P\tgcloud\t'* ]] && ok "gcloud: a current SDK has no update" \
+  || bad "gcloud: a current SDK has no update" "got: $out"
+out=$(run native NATIVE_SDK="$native" GCLOUD_BROKEN=1 zsh "$SCAN" gcloud 2>/dev/null)
+check "gcloud: unrecognised output is an error, not an up-to-date SDK" "$out" $'M\tgcloud\terror'
+print '{"disable_updater":true}' > "$native/lib/googlecloudsdk/core/config.json"
+out=$(run native NATIVE_SDK="$native" zsh "$SCAN" gcloud 2>/dev/null)
+check "gcloud: respects installations with component updates disabled" "$out" $'M\tgcloud\tskipped'
+rm "$native/lib/googlecloudsdk/core/config.json"
+out=$(run native NATIVE_SDK="$native" NATIVE_BREW_OWNER=gcloud-cli zsh "$SCAN" gcloud 2>/dev/null)
+check "gcloud: a separate direct SDK is not hidden by a stray cask" "$out" $'M\tgcloud\tok'
+mkdir -p "$stubs/Cellar/gcloud/bin"
+mv "$stubs/native/gcloud" "$stubs/Cellar/gcloud/bin/gcloud"
+ln -s "$stubs/Cellar/gcloud/bin/gcloud" "$stubs/native/gcloud"
+out=$(run native NATIVE_SDK="$native" zsh "$SCAN" gcloud 2>/dev/null)
+check "gcloud: is not duplicated when Homebrew owns it" "$out" $'M\tgcloud\tskipped\tUpdated by Homebrew'
 
 # --- macOS: a busy update daemon falls back to the list macOS keeps in its preferences -------------
 stub sustall 'sleep 30' softwareupdate

@@ -3,8 +3,8 @@ import Foundation
 /// A package manager Macup knows how to scan and upgrade.
 enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
     // Order is display and "Update all" order: rustup runs before cargo so crates needing a newer rustc can build.
-    case macos, brew, port, npm, bun, pnpm, pip, pipx, uv, conda, rustup, cargo, go, gem, composer, nix, mise, tools,
-        mas
+    case macos, brew, port, npm, bun, pnpm, pip, pipx, uv, conda, rustup, cargo, go, gem, composer, nix, mise,
+        gcloud, tailscale, tools, mas
 
     var id: String { rawValue }
 
@@ -29,6 +29,8 @@ enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
         case .nix: "Nix"
         case .mise: "mise"
         case .tools: "Self-installed tools"
+        case .gcloud: "Google Cloud CLI"
+        case .tailscale: "Tailscale"
         }
     }
 
@@ -49,15 +51,29 @@ enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
         case .nix: "snowflake"
         case .mise: "square.stack.3d.up"
         case .tools: "wrench.and.screwdriver"
+        case .gcloud: "cloud"
+        case .tailscale: "network"
         }
     }
 
-    /// Managers whose "update" is a hand-off (System Settings) rather than a command; excluded from Update All.
-    var opensExternally: Bool { self == .macos }
+    /// Managers whose update opens another updater; excluded from Update All.
+    var opensExternally: Bool { self == .macos || self == .tailscale }
+
+    var updateButtonTitle: String {
+        switch self {
+        case .macos: "Open Settings"
+        case .tailscale: "Open Updater"
+        default: "Update"
+        }
+    }
+
+    var externalUpdateHelp: String {
+        self == .tailscale ? "Open the Tailscale updater" : "Open Software Update in System Settings"
+    }
 
     /// Managers whose packages MacUp can uninstall. Toolchains, OS updates, self-installed tools and the
     /// conda base environment are left alone.
-    var supportsRemoval: Bool { ![.rustup, .mas, .macos, .tools, .mise, .conda].contains(self) }
+    var supportsRemoval: Bool { ![.rustup, .mas, .macos, .tools, .mise, .conda, .gcloud, .tailscale].contains(self) }
 
     /// OSV.dev ecosystem name used for vulnerability lookups, when the manager maps to one.
     var osvEcosystem: String? {
@@ -68,7 +84,7 @@ enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
         case .gem: "RubyGems"
         case .go: "Go"
         case .composer: "Packagist"
-        case .brew, .rustup, .mas, .macos, .port, .conda, .nix, .mise, .tools: nil
+        case .brew, .rustup, .mas, .macos, .port, .conda, .nix, .mise, .tools, .gcloud, .tailscale: nil
         }
     }
 }

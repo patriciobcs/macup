@@ -33,6 +33,11 @@ is "nothing named still updates the toolchains" 'rustup update' -- rustup
 # --- the names reach the command for the managers that take them -----------------------------------
 is "npm names are passed through" 'npm install -g' -- npm lodash
 is "an unknown manager is refused" 'unknown manager' -- definitely-not-a-manager
+is "gcloud keeps its SDK update interactive" 'gcloud components update' -- gcloud gcloud
+got=$(MACUP_DRY_RUN=1 "$UP" gcloud gcloud 2>&1)
+[[ "$got" != *--quiet* ]] && ok "gcloud never suppresses installer prompts by default" \
+  || bad "gcloud never suppresses installer prompts by default" "got: $got"
+is "Tailscale opens its own updater" 'tailscale update' -- tailscale Tailscale
 
 # --- the command table: what the app shows, and what a replacement does -----------------------------
 CMDS=Macup/Resources/Scripts/macup-commands.sh
@@ -74,6 +79,15 @@ listed=$(Macup/Resources/Scripts/macup-scan.sh --commands 2>&1)
 is "a cask's command is the one Terminal is given" 'brew upgrade --cask -- docker-desktop' -- brew cask:docker-desktop
 # Run for real, sudo refuses for want of a terminal, and the log says how to finish the job.
 stubs=$(mktemp -d "${TMPDIR:-/tmp}/macup-up.XXXXXX")
+cat > "$stubs/gcloud" <<'GCLOUD'
+#!/bin/zsh
+print -r -- "$*" >> "$GCLOUD_CALLS"
+GCLOUD
+chmod +x "$stubs/gcloud"
+got=$(GCLOUD_CALLS="$stubs/gcloud-calls" MACUP_USER_PATH="$stubs" "$UP" gcloud gcloud </dev/null 2>&1); rc=$?
+[[ $rc == 1 && "$got" == *'may install system Python'* && ! -e "$stubs/gcloud-calls" ]] \
+  && ok "gcloud refuses unattended updates before invoking the SDK" \
+  || bad "gcloud refuses unattended updates before invoking the SDK" "exit $rc; got: $got"
 printf '#!/bin/zsh\n%s\n' 'echo "sudo: a terminal is required to read the password; either use the -S option" >&2
 echo "Error: docker-desktop: Failure while executing; /usr/bin/sudo -E -- /bin/rm exited with 1." >&2; exit 1' \
   > "$stubs/brew"; chmod +x "$stubs/brew"

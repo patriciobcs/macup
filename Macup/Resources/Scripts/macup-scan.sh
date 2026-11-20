@@ -20,7 +20,10 @@ setopt NULL_GLOB EXTENDED_GLOB 2>/dev/null
 for d in "$HOME/.bun/bin" "$HOME/.cargo/bin" "$HOME/.local/bin" /opt/homebrew/bin /opt/homebrew/sbin /usr/local/bin \
          "$HOME"/.nvm/versions/node/*/bin "$HOME"/.volta/bin "$HOME"/Library/pnpm "$HOME"/Library/pnpm/bin "$HOME"/.local/share/pnpm "$HOME"/.local/share/pnpm/bin "${PNPM_HOME:-/nonexistent}" "${PNPM_HOME:-/nonexistent}/bin" "$HOME"/.hermes/node/bin \
          "$HOME"/.fnm/aliases/default/bin "$HOME"/Library/Application\ Support/fnm/aliases/default/bin \
-         /Library/Frameworks/Python.framework/Versions/Current/bin "$HOME"/.pyenv/shims "$HOME"/.rbenv/shims; do
+         /Library/Frameworks/Python.framework/Versions/Current/bin "$HOME"/.pyenv/shims "$HOME"/.rbenv/shims \
+         "$HOME/google-cloud-sdk/bin" /usr/local/google-cloud-sdk/bin /opt/google-cloud-sdk/bin \
+         /opt/homebrew/share/google-cloud-sdk/bin /usr/local/share/google-cloud-sdk/bin \
+         /Applications/Tailscale.app/Contents/MacOS "$HOME/Applications/Tailscale.app/Contents/MacOS"; do
   [[ -d "$d" && ":$PATH:" != *":$d:"* ]] && PATH="$PATH:$d"
 done
 export PATH
@@ -44,6 +47,8 @@ export npm_config_update_notifier=false
 # The binary behind a manager, where the names differ. Empty means there is nothing to ask.
 source "${0:A:h}/macup-commands.sh"
 source "${0:A:h}/macup-pip.sh"
+source "${0:A:h}/macup-gem.sh"
+source "${0:A:h}/macup-native-tools.sh"
 
 tool_of() { case "$1" in nix) print nix-env ;; tools|macos) print "" ;; *) print "$1" ;; esac }
 # M<tab>manager<tab>status<tab>message<tab>version. The version travels with every manager that is
@@ -68,7 +73,8 @@ else mtime() { [[ -e "$1" ]] && stat -c %Y "$1" 2>/dev/null; }; fi
 typeset -A _version_cache
 self_version() {
   [[ -n ${_version_cache[$1]+set} ]] && { print -r -- "${_version_cache[$1]}"; return }
-  local v; v=$(bounded 5 "${(q)1} --version" 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
+  local v arg=--version; [[ "$1" == tailscale ]] && arg=version
+  v=$(bounded 5 "${(q)1} $arg" 2>/dev/null | head -n1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
   _version_cache[$1]=$v
   print -r -- "$v"
 }
@@ -359,19 +365,23 @@ scan_rustup() {
 
 scan_gem() {
   have gem || { header gem missing; return; }
-  local dir; dir=$(gem environment gemdir 2>/dev/null)
+  macup_gem_setup
+  local dir=$MACUP_GEM_HOME
   local out; local err="$tmp/gem.err"
   out=$(eval "$(check_cmd gem)" 2>"$err") || { header gem error "gem outdated failed$(vtag gem): $(errline "$err")"; return; }
   # System Ruby installs into /Library, which needs an administrator password to change.
   local system=0
-  if [[ -n "$dir" && ! -w "$dir" ]]; then header gem ok admin; system=1; else header gem ok; fi
+  if [[ -n "$dir" && ! -w "$dir" ]] && macup_gem_is_system_ruby; then header gem ok admin; system=1; else header gem ok; fi
   local name cur latest kind loc p
   local -a gempaths; gempaths=(${(s/:/)$(gem environment gempath 2>/dev/null)})
   printf '%s\n' "$out" | sed -nE 's/^([A-Za-z0-9_.-]+) \(([^ ]+) < ([^)]+)\)$/\1\t\2\t\3/p' | \
   while IFS=$'\t' read -r name cur latest; do
+    macup_gem_context "$name" "$cur"
+    macup_gem_is_brew_owned "$name" && continue
     kind=gem
     local userdirs=("$HOME"/.gem/ruby/*/gems/"$name"-"$cur"); loc=""
-    if (( ${#userdirs} )); then loc=${userdirs[1]}
+    if [[ -n "$MACUP_GEM_USER_FLAG" ]]; then loc="$MACUP_GEM_TARGET/gems/$name-$cur"
+    elif (( ${#userdirs} )); then loc=${userdirs[1]}
     else
       (( system )) && kind=system-gem
       # Installed gems can live in any GEM_PATH entry (system Ruby keeps its own under /System).
@@ -386,12 +396,28 @@ scan_mas() {
   local out; local err="$tmp/mas.err"
   out=$(eval "$(check_cmd mas)" 2>"$err") || { header mas error "mas outdated failed$(vtag mas): $(errline "$err")"; return; }
   header mas ok
-  local id name cur latest app when
+  local id name cur latest app when version installed location
+  local -A seen
   # "497799835 Xcode (15.0 -> 15.1)"
   printf '%s\n' "$out" | sed -nE 's/^([0-9]+) +(.*) \(([^ ]+) -> ([^)]+)\)$/\1\t\2\t\3\t\4/p' | \
   while IFS=$'\t' read -r id name cur latest; do
-    app=$(mdfind "kMDItemAppStoreAdamID == $id" 2>/dev/null | head -n1)
-    when=""; [[ -n "$app" ]] && when=$(mtime "$app/Contents/Info.plist")
+    [[ -n "${seen[$id]:-}" ]] && continue
+    seen[$id]=1
+    # mas reads Spotlight metadata, which can describe an old duplicate after the main copy was
+    # updated. Its update command takes an App Store ID, not a path, so offering that ID again just
+    # reinstalls the current copy. Reconcile every indexed copy against its actual bundle version.
+    installed=""; location=""
+    while IFS= read -r app; do
+      [[ -f "$app/Contents/Info.plist" ]] || continue
+      version=$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist" 2>/dev/null)
+      [[ -n "$version" ]] || continue
+      if [[ -z "$installed" ]] || native_version_is_newer "$version" "$installed"; then
+        installed=$version; location=$app
+      fi
+    done < <(mdfind "kMDItemAppStoreAdamID == $id" 2>/dev/null)
+    [[ -n "$installed" ]] && cur=$installed
+    native_version_is_newer "$latest" "$cur" || continue
+    when=""; [[ -n "$location" ]] && when=$(mtime "$location/Contents/Info.plist")
     pkg mas "$name" "$cur" "$latest" app "$id" "$when"
   done
 }
@@ -422,6 +448,51 @@ scan_macos() {
     local installed="?"; [[ "$title" == macOS* ]] && installed=$current
     pkg macos "$title" "$installed" "$version" os "" ""
   done
+}
+
+scan_tailscale() {
+  have tailscale || { header tailscale missing; return; }
+  local owner; owner=$(native_tool_owner tailscale) && { header tailscale skipped "Updated by $owner"; return; }
+  local out cur variant latest track=stable err="$tmp/tailscale.err"
+  out=$(eval "$(check_cmd tailscale)" 2>"$err") || { header tailscale error "tailscale version failed: $(errline "$err")"; return; }
+  cur=$(print -r -- "$out" | tr '{,' '\n\n' | jstr majorMinorPatch)
+  variant=$(print -r -- "$out" | tr '{,' '\n\n' | jstr osVariant)
+  case "$variant" in
+    macsys) ;;
+    macos|macappstore) header tailscale skipped "Updated by the App Store"; return ;;
+    *) header tailscale skipped "CLI-only Tailscale is updated by the manager that installed it"; return ;;
+  esac
+  [[ "$cur" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] || { header tailscale error "Could not read the Tailscale version"; return; }
+  # Odd minor versions are Tailscale's unstable track; keep the installed track.
+  local minor=${${cur#*.}%%.*}; (( minor % 2 )) && track=unstable
+  out=$(curl -fsS -m 20 "https://pkgs.tailscale.com/$track/?mode=json" 2>"$err") \
+    || { header tailscale error "Tailscale update check failed: $(errline "$err")"; return; }
+  latest=$(print -r -- "$out" | tr '{,' '\n\n' | jstr MacZipsVersion)
+  [[ "$latest" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] || { header tailscale error "Tailscale did not report a macOS release"; return; }
+  header tailscale ok
+  native_version_is_newer "$latest" "$cur" && pkg tailscale Tailscale "$cur" "$latest" app "$track" "$(mtime "$(tool_path tailscale)")"
+}
+
+scan_gcloud() {
+  have gcloud || { header gcloud missing; return; }
+  local owner; owner=$(native_tool_owner gcloud) && { header gcloud skipped "Updated by $owner"; return; }
+  local root; root=$(gcloud info --format='value(installation.sdk_root)' 2>/dev/null)
+  if gcloud_updater_disabled "$root"; then
+    header gcloud skipped "Component updates are disabled; use the installer that manages this SDK"; return
+  fi
+  local out cur latest err="$tmp/gcloud.err"
+  # Google's component manager prints SDK versions on stderr. Treat the SDK as one update:
+  # its updater upgrades all installed components together, including bq and gsutil.
+  out=$(eval "$(check_cmd gcloud)" 2>"$err") || { header gcloud error "gcloud components list failed: $(errline "$err")"; return; }
+  out="$out"$'\n'"$(cat "$err")"
+  cur=$(print -r -- "$out" | sed -nE 's/^Your current Google Cloud (CLI|SDK) version is: ([0-9.]+).*/\2/p' | head -n1)
+  latest=$(print -r -- "$out" | sed -nE 's/^The latest available version is: ([0-9.]+).*/\1/p' | head -n1)
+  # Fixed-version installations omit that line but still report their target in the epilogue.
+  [[ -n "$latest" ]] || latest=$(print -r -- "$out" | sed -nE 's/.*latest version \[([0-9.]+)\].*/\1/p' | head -n1)
+  [[ "$cur" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' && "$latest" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' ]] \
+    || { header gcloud error "Could not read the SDK versions from gcloud components list"; return; }
+  header gcloud ok
+  native_version_is_newer "$latest" "$cur" && pkg gcloud gcloud "$cur" "$latest" sdk "" "$(mtime "$root/VERSION")"
 }
 
 scan_tools() {
@@ -594,7 +665,7 @@ for p in acts.get("LINK", []):
   done
 }
 
-ALL=(macos brew port npm bun pnpm pip pipx uv conda rustup cargo go gem composer nix mise tools mas)
+ALL=(macos brew port npm bun pnpm pip pipx uv conda rustup cargo go gem composer nix mise gcloud tailscale tools mas)
 # The app asks for the commands so it can show them and offer to change them. Printed from the same
 # table the scan runs from, so what is shown is what runs.
 [[ "${1:-}" == --commands ]] && { macup_print_commands; exit 0 }

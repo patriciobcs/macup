@@ -30,6 +30,7 @@ export HOMEBREW_NO_ANALYTICS=1 HOMEBREW_NO_ENV_HINTS=1 HOMEBREW_COLOR=0 NO_COLOR
 
 source "${0:A:h}/macup-commands.sh"
 source "${0:A:h}/macup-pip.sh"
+source "${0:A:h}/macup-gem.sh"
 
 (( $# >= 2 )) || { echo "usage: $0 <manager> <name> [kind]" >&2; exit 64; }
 manager=$1; name=$2; kind=${3:-}
@@ -82,11 +83,18 @@ as_admin() {
   osascript -e "do shell script \"PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/local/bin $cmd 2>&1\" with administrator privileges"
 }
 
-# gem: elevate only when the gem directory is not writable (system Ruby).
+# Do not unlink Homebrew's bundled gems, or switch an unwritable non-system Ruby to Apple's Ruby.
 gem_run() {
-  local dir; dir=$(gem environment gemdir 2>/dev/null)
-  # An unwritable gem dir means the system Ruby: elevate Apple's /usr/bin/gem, never a shim from PATH.
-  if [[ -n "$dir" && ! -w "$dir" ]]; then as_admin /usr/bin/gem "$@"; else run gem "$@"; fi
+  macup_gem_setup
+  macup_gem_context "$name"
+  macup_gem_is_brew_owned "$name" && { macup_gem_brew_message "$name"; return 1; }
+  local dir=$MACUP_GEM_TARGET
+  if [[ -n "$dir" && ! -w "$dir" ]]; then
+    if [[ -z "$MACUP_GEM_USER_FLAG" ]] && macup_gem_is_system_ruby; then as_admin /usr/bin/gem "$@"
+    else print -r -- "→ $dir is not writable; remove $name using the Ruby installation that owns it."; return 1; fi
+  else
+    if [[ -n "$MACUP_GEM_USER_FLAG" ]]; then run gem "$@" --install-dir "$dir"; else run gem "$@"; fi
+  fi
 }
 
 case "$manager" in
@@ -119,6 +127,6 @@ case "$manager" in
   # from a setting: only a root-owned executable this script names itself is elevated.
   gem)      gem_run uninstall -x -a "$name" ;;
   port)     as_admin /opt/local/bin/port -N uninstall "$name" ;;
-  rustup|mas|macos|tools|mise|conda) echo "Removing is not supported for $manager" >&2; exit 65 ;;
+  rustup|mas|macos|tools|mise|conda|gcloud|tailscale) echo "Removing is not supported for $manager" >&2; exit 65 ;;
   *) echo "unknown manager: $manager" >&2; exit 64 ;;
 esac

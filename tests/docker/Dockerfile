@@ -50,6 +50,12 @@ RUN curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-py311_24.1.2-0-Lin
 RUN curl -fsSL https://deno.land/install.sh | sh -s v1.40.0 2>&1 | tail -3 || true
 ENV PATH=/home/dev/.deno/bin:$PATH
 
+# Google's own component updater, pinned behind the current SDK release.
+RUN case "$(uname -m)" in x86_64) gc_arch=x86_64 ;; aarch64|arm64) gc_arch=arm ;; esac \
+ && curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-591.0.0-linux-${gc_arch}.tar.gz" \
+    | tar -xz -C "$HOME"
+ENV PATH=/home/dev/google-cloud-sdk/bin:$PATH CLOUDSDK_CORE_DISABLE_USAGE_REPORTING=true
+
 COPY --chown=dev Macup/Resources/Scripts /home/dev/scripts
 COPY --chown=dev tests/docker/run-tests.sh /home/dev/run-tests.sh
 RUN chmod +x /home/dev/scripts/*.sh /home/dev/run-tests.sh

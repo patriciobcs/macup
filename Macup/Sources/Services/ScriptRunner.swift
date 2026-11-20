@@ -101,6 +101,17 @@ enum ScriptRunner {
         return result?.stdout.split(separator: "\n").first { $0.hasPrefix("$ ") }.map { String($0.dropFirst(2)) }
     }
 
+    /// Keep the SDK path, ownership checks and interactive-only guard when handing gcloud to Terminal.
+    static func interactiveUpgradeCommand(_ pkg: OutdatedPackage) async -> String? {
+        guard let url = scriptURL("macup-upgrade") else { return nil }
+        let env = await environment(brewGreedy: false)
+        func quote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let keys = ["MACUP_USER_PATH", "MACUP_CMD_update_gcloud", "CLOUDSDK_CONFIG", "CLOUDSDK_PYTHON"]
+        let variables = keys.compactMap { key in env[key].map { "\(key)=\(quote($0))" } }
+        return (["env"] + variables + ["/bin/zsh", quote(url.path), pkg.manager.rawValue, quote(pkg.upgradeArgument)])
+            .joined(separator: " ")
+    }
+
     static func remove(
         pkg: OutdatedPackage, brewGreedy: Bool,
         onOutput: @Sendable @escaping (String) -> Void

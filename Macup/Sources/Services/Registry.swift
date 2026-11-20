@@ -183,7 +183,7 @@ actor Registry {
                 let s = json["published_at"] as? String, let d = Self.parseISO(s)
             else { return nil }
             return (d, .registry)
-        case .rustup, .mas, .macos, .port, .conda, .nix, .mise:
+        case .rustup, .mas, .macos, .port, .conda, .nix, .mise, .gcloud, .tailscale:
             return nil
         }
     }

@@ -104,9 +104,15 @@ final class SelfUpdateTests: StubScriptCase {
         let store = store()
         var sudoCask = pkg("installer-app", manager: .brew, kind: "cask")
         sudoCask.extra = "admin"
-        store.loadFixture(reports: [], packages: [pkg("Tahoe", manager: .macos), sudoCask], log: "")
-        XCTAssertEqual(store.eligible.count, 2, "both are ready for the user")
-        XCTAssertFalse(store.autoUpdateIsDue, "but one is a System Settings hand-off and one needs a password")
+        store.loadFixture(
+            reports: [],
+            packages: [
+                pkg("Tahoe", manager: .macos), pkg("Tailscale", manager: .tailscale), pkg("gcloud", manager: .gcloud),
+                sudoCask,
+            ],
+            log: "")
+        XCTAssertEqual(store.eligible.count, 4, "all four are ready for the user")
+        XCTAssertFalse(store.autoUpdateIsDue, "the updaters need a person, and the cask needs a password")
 
         store.loadFixture(reports: [], packages: [pkg("Tahoe", manager: .macos), pkg("lodash")], log: "")
         XCTAssertTrue(store.autoUpdateIsDue, "an ordinary package is something to do")

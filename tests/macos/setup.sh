@@ -58,6 +58,11 @@ sed -i '' 's/node = "22.0.0"/node = "22"/' ~/.config/mise/config.toml
 # Deno (self-installed).
 curl -fsSL https://deno.land/install.sh | sh -s v1.40.0
 
+# A direct Google SDK install, so its component updater is tested independently of Homebrew.
+case "$(uname -m)" in arm64) gc_arch=arm ;; *) gc_arch=x86_64 ;; esac
+curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-591.0.0-darwin-${gc_arch}.tar.gz" \
+  | tar -xz -C "$HOME"
+
 # MacPorts: install the pkg for this macOS version; scanning works, nothing is pinned.
 if ! command -v port >/dev/null; then
   major=$(sw_vers -productVersion | cut -d. -f1)
