@@ -4,7 +4,7 @@ import Foundation
 /// person might type can be checked without starting a scan.
 struct CommandLineRequest: Equatable {
     enum Command: String, CaseIterable {
-        case status, check, upgrade, ignore, unignore, help, version
+        case status, check, inventory, upgrade, remove, ignore, unignore, help, version
     }
 
     var command: Command
@@ -16,6 +16,7 @@ struct CommandLineRequest: Equatable {
     var dryRun = false
     var json = false
     var skipAdmin = false
+    var installationIDs: [String] = []
 
     enum Parsed: Equatable {
         /// Not a command-line run at all: launch the menu bar app.
@@ -31,6 +32,7 @@ struct CommandLineRequest: Equatable {
     private static let aliases: [String: Command] = [
         "status": .status, "list": .status, "ls": .status, "check": .check, "scan": .check,
         "upgrade": .upgrade, "update": .upgrade, "ignore": .ignore, "unignore": .unignore,
+        "inventory": .inventory, "installations": .inventory, "remove": .remove,
         "help": .help, "version": .version,
     ]
 
@@ -52,7 +54,10 @@ struct CommandLineRequest: Equatable {
             return asTool || isToolWord(first) ? .invalid("Unknown command “\(first)”.") : .app
         }
 
-        for arg in args {
+        let selectors = installationOptions(args, command: request.command)
+        if let error = selectors.error { return .invalid(error) }
+        request.installationIDs = selectors.ids
+        for arg in selectors.remaining {
             switch arg {
             case "--now": request.now = true
             case "--dry-run", "-n": request.dryRun = true
@@ -62,8 +67,8 @@ struct CommandLineRequest: Equatable {
             default:
                 if arg.hasPrefix("-") { return .invalid("Unknown option “\(arg)”.") }
                 switch request.command {
-                case .ignore, .unignore: request.names.append(arg)
-                case .status, .check, .upgrade:
+                case .ignore, .unignore, .remove: request.names.append(arg)
+                case .status, .check, .inventory, .upgrade:
                     guard let manager = Manager.named(arg) else {
                         return .invalid(
                             "Unknown package manager “\(arg)”. Known: "
@@ -77,12 +82,34 @@ struct CommandLineRequest: Equatable {
         if [.ignore, .unignore].contains(request.command), request.names.isEmpty {
             return .invalid("Say which package, e.g. macup \(request.command.rawValue) npm:left-pad")
         }
+        if request.command == .remove && request.names.isEmpty && request.installationIDs.isEmpty {
+            return .invalid("Say which installation to remove; use macup inventory --json to find its id.")
+        }
         // Update All's order, whatever order they were typed in: rustup before cargo, npm's own last.
         request.managers.sort { Manager.allCases.firstIndex(of: $0)! < Manager.allCases.firstIndex(of: $1)! }
         return .run(request)
     }
 
     /// "upgrade", "--upgrade", "-h": a command, with or without the dashes people reach for.
+    private static func installationOptions(
+        _ args: [String], command: Command
+    ) -> (ids: [String], remaining: [String], error: String?) {
+        var ids: [String] = []
+        var remaining: [String] = []
+        for arg in args {
+            if arg.hasPrefix("--installation=") {
+                let id = String(arg.dropFirst("--installation=".count))
+                guard [.upgrade, .remove].contains(command), !id.isEmpty else {
+                    return ([], [], "Use --installation=<id> with upgrade or remove.")
+                }
+                ids.append(id)
+            } else {
+                remaining.append(arg)
+            }
+        }
+        return (ids, remaining, nil)
+    }
+
     private static func command(for word: String) -> Command? {
         switch word {
         case "-h", "--help": return .help
@@ -102,7 +129,9 @@ struct CommandLineRequest: Equatable {
         Commands:
           status            What is ready to update and what is still waiting (the default)
           check             Check for updates now, then show the status
+          inventory         Installed apps, runtimes and tools, with their paths and owners
           upgrade           Update what is ready, like Update All in the menu bar
+          remove <id>       Remove one installation using its recorded package manager
           ignore <package>  Stop offering a package, e.g. macup ignore npm:left-pad
           unignore <package>
           version           Print MacUp's version
@@ -112,10 +141,12 @@ struct CommandLineRequest: Equatable {
 
         Options:
           --now             With upgrade: include updates still waiting out the minimum age
-          -n, --dry-run     With upgrade: print what would run, change nothing
+          -n, --dry-run     With upgrade or remove: print what would run, change nothing
           --skip-admin      With upgrade: leave anything that needs an administrator password
                             (always the case when not run from a terminal, e.g. cron)
-          --json            With status or check: machine-readable output
+          --json            With status, check or inventory: machine-readable output
+          --installation=<id>
+                            With upgrade or remove: select the exact copy from inventory --json
 
         Settings, ignored packages and history are the ones the menu bar app uses.
         """

@@ -250,7 +250,7 @@ struct PanelRow: View {
         .opacity(dimmed ? 0.6 : 1)
         .contextMenu {
             Button("Ignore \(pkg.name)") { store.ignore(pkg) }
-            if pkg.manager.supportsRemoval {
+            if pkg.supportsRemoval {
                 Button("Remove \(pkg.name)…") {
                     if UpdateStore.confirmRemoval(of: pkg) { Task { await store.remove(pkg) } }
                 }
@@ -306,16 +306,16 @@ struct PanelRow: View {
             Button {
                 Task { await store.upgrade(pkg) }
             } label: {
-                Image(systemName: pkg.manager.opensExternally ? "arrow.up.forward.app" : "arrow.up.circle").font(
+                Image(systemName: pkg.opensExternally ? "arrow.up.forward.app" : "arrow.up.circle").font(
                     .title3)
             }
             .buttonStyle(.borderless)
             .help(
-                pkg.manager.opensExternally
-                    ? pkg.manager.externalUpdateHelp
+                pkg.opensExternally
+                    ? pkg.updateHelp
                     : dimmed ? "Update now, before the minimum age has passed" : "Update \(pkg.name)"
             )
-            .accessibilityLabel(pkg.manager.opensExternally ? pkg.manager.externalUpdateHelp : "Update \(pkg.name)")
+            .accessibilityLabel(pkg.opensExternally ? pkg.updateHelp : "Update \(pkg.name)")
         }
     }
 

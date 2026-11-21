@@ -3,7 +3,7 @@ import Observation
 
 /// One meaningful thing the user did through MacUp: an upgrade, a removal, an ignore.
 struct ActionRecord: Identifiable, Codable, Equatable {
-    enum Kind: String, Codable { case upgrade, remove, ignore, unignore, install }
+    enum Kind: String, Codable { case upgrade, remove, ignore, unignore, install, handoff }
 
     var id = UUID()
     var date = Date()
@@ -22,11 +22,15 @@ struct ActionRecord: Identifiable, Codable, Equatable {
 
     var title: String {
         switch kind {
-        case .upgrade: succeeded ? "Updated \(package)" : "Failed to update \(package)"
-        case .remove: succeeded ? "Removed \(package)" : "Failed to remove \(package)"
-        case .ignore: "Ignored \(package)"
-        case .unignore: "Stopped ignoring \(package)"
-        case .install: succeeded ? "Installed \(package)" : "Failed to install \(package)"
+        case .upgrade:
+            if succeeded && detail.hasPrefix("Opened ") { return "Opened \(package)" }
+            if succeeded && detail == "Ran updater" { return "Ran updater for \(package)" }
+            return succeeded ? "Updated \(package)" : "Failed to update \(package)"
+        case .remove: return succeeded ? "Removed \(package)" : "Failed to remove \(package)"
+        case .ignore: return "Ignored \(package)"
+        case .unignore: return "Stopped ignoring \(package)"
+        case .install: return succeeded ? "Installed \(package)" : "Failed to install \(package)"
+        case .handoff: return succeeded ? "Opened \(package)" : "Failed to open \(package)"
         }
     }
 }
@@ -108,6 +112,20 @@ final class History {
     func clear() {
         records = []
         save()
+    }
+
+    func migratePackageIDs(_ mapping: [String: String]) {
+        guard !mapping.isEmpty else { return }
+        var changed = false
+        for index in records.indices {
+            let record = records[index]
+            let old = record.packageID ?? "\(record.manager.rawValue):\(record.package)"
+            if let updated = mapping[old], updated != old {
+                records[index].packageID = updated
+                changed = true
+            }
+        }
+        if changed { save() }
     }
 
     func latestRecord(for packageID: String) -> ActionRecord? {

@@ -31,11 +31,13 @@ enum Subprocess {
         environment: [String: String]?,
         timeout: TimeInterval,
         label: String? = nil,
+        workingDirectory: URL? = nil,
         onOutput: (@Sendable (String) -> Void)? = nil
     ) async throws -> SubprocessResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        process.currentDirectoryURL = workingDirectory
         if let environment { process.environment = environment }
         process.standardInput = FileHandle.nullDevice
         let outPipe = Pipe(), errPipe = Pipe()

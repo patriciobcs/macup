@@ -42,7 +42,10 @@ final class ShellEnvironmentTests: XCTestCase {
     }
 
     func testTheBundledScriptsAreWhereTheAppLooksForThem() {
-        for name in ["macup-scan", "macup-upgrade", "macup-remove", "macup-setup"] {
+        for name in [
+            "macup-scan", "macup-upgrade", "macup-remove", "macup-setup", "macup-commands",
+            "macup-pip", "macup-gem", "macup-native-tools", "macup-apps",
+        ] {
             XCTAssertNotNil(ScriptRunner.scriptURL(name), "\(name).sh is missing from the app bundle")
         }
         XCTAssertNil(ScriptRunner.scriptURL("macup-nonexistent"))

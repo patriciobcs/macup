@@ -3,6 +3,7 @@ import SwiftUI
 
 struct MainWindowView: View {
     @Environment(UpdateStore.self) private var store
+    @State private var showInstallations = false
 
     var body: some View {
         HSplitView {
@@ -12,8 +13,16 @@ struct MainWindowView: View {
                 .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .toolbar {
+            ToolbarItem {
+                Button {
+                    showInstallations = true
+                } label: {
+                    Label("Installations", systemImage: "square.stack.3d.up")
+                }
+            }
             ToolbarItem { SettingsLink { Label("Settings", systemImage: "gearshape") } }
         }
+        .sheet(isPresented: $showInstallations) { InstallationsView().environment(store) }
     }
 }
 
@@ -228,6 +237,7 @@ struct HistoryRow: View {
         case .ignore: "eye.slash.circle.fill"
         case .unignore: "eye.circle.fill"
         case .install: record.succeeded ? "plus.circle.fill" : "xmark.circle.fill"
+        case .handoff: record.succeeded ? "arrow.up.forward.app" : "xmark.circle.fill"
         }
     }
 }

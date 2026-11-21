@@ -12,6 +12,7 @@ final class UpdateStore {
     /// The self-installed tools the last scan looked for, whether or not they are here.
     private(set) var tools: [ToolReport] = []
     private(set) var packages: [OutdatedPackage] = []
+    private(set) var installations: [InstalledItem] = []
     private(set) var isScanning = false
     private(set) var lastScan: Date?
     private(set) var scanError: String?
@@ -88,7 +89,6 @@ final class UpdateStore {
         stateURL = dir.appendingPathComponent("state.json")
         history = History(directory: dir)
         updateLock = UpdateLock(url: dir.appendingPathComponent("update.lock"))
-        // A store told where to live keeps its registry cache there too, so tests never touch the real one.
         registry = Registry(directory: directory)
         if persist { loadSavedState() }
     }
@@ -99,6 +99,7 @@ final class UpdateStore {
         else { return }
         firstSeen = saved.firstSeen
         packages = saved.packages
+        installations = saved.installations ?? []
         reports = saved.reports
         lastScan = saved.lastScan
         notified = saved.notified
@@ -114,8 +115,6 @@ final class UpdateStore {
         settings.reloadIgnored()
     }
 
-    // MARK: Derived state
-
     func ignore(_ pkg: OutdatedPackage) {
         settings.ignoredPackages.insert(pkg.id)
         failures.removeValue(forKey: pkg.id)
@@ -124,8 +123,6 @@ final class UpdateStore {
                 kind: .ignore, manager: pkg.manager, package: pkg.name, detail: "\(pkg.installed) → \(pkg.latest)",
                 succeeded: true, packageID: pkg.id))
     }
-
-    // MARK: Scanning
 
     func start() {
         scheduler?.cancel()
@@ -138,8 +135,6 @@ final class UpdateStore {
                     nextScan = Date().addingTimeInterval(max(0.25, self.settings.checkIntervalHours) * 3600)
                 }
                 self.clock = Date()
-                // Wake every five minutes so a package crossing its minimum age shows up, an automatic run
-                // starts (with a fresh scan) once it is due, and a shorter check interval takes effect soon.
                 try? await Task.sleep(for: .seconds(300))
             }
         }
@@ -151,7 +146,6 @@ final class UpdateStore {
     func scan(managers: [Manager]? = nil) async {
         let targets = managers ?? settings.enabledManagers
         if isScanning {
-            // Queue instead of dropping: a rescan after an upgrade must not be lost to a running scan.
             pendingRescan.formUnion(targets)
             return
         }
@@ -170,8 +164,6 @@ final class UpdateStore {
             lastScan = Date()
             clock = Date()
             persist()
-            // No point announcing updates that are about to be installed a moment later, nor ones
-            // the person is looking at in the terminal right now.
             if !autoUpdateIsDue, !isCommandLine { await notifyIfNeeded() }
         } catch {
             scanError = error.localizedDescription
@@ -182,7 +174,6 @@ final class UpdateStore {
             pendingRescan.removeAll()
             await scan(managers: again)
         }
-        // Only once the scan is over: an upgrade rescans, and that would otherwise just be queued.
         await autoUpdateIfDue()
     }
 
@@ -209,8 +200,11 @@ final class UpdateStore {
     }
 
     func merge(_ result: ScanResult, scanned: [Manager]) {
+        let migration = installationMigration(result.packages)
+        firstSeen = migration.firstSeen
+        failures = migration.failures
+        notified = migration.notified
         let set = Set(scanned)
-        // A package that is no longer outdated was upgraded after all; forget its failure.
         let stillOutdated = Set(result.packages.map(\.id))
         failures = failures.filter {
             !set.contains(Manager(rawValue: $0.key.split(separator: ":")[0].description)!)
@@ -219,19 +213,14 @@ final class UpdateStore {
         reports = (reports.filter { !set.contains($0.manager) } + result.reports)
             .sorted { Manager.allCases.firstIndex(of: $0.manager)! < Manager.allCases.firstIndex(of: $1.manager)! }
         packages = packages.filter { !set.contains($0.manager) } + result.packages
-        // Only a scan that looked at the tools knows about them; a scan of one other manager must not
-        // wipe the list.
+        installations = installations.filter { !set.contains($0.manager) } + result.installations
         if set.contains(.tools) { tools = result.tools }
-        // Track when each (package, version) pair was first observed. Pairs that vanish are kept for a
-        // week, so a scan run offline (which cannot resolve some latest versions) does not reset the clock.
         let now = Date()
         var seen: [String: Date] = firstSeen.filter { now.timeIntervalSince($0.value) < 7 * 86_400 }
         for p in packages { seen[p.versionKey] = firstSeen[p.versionKey] ?? now }
         firstSeen = seen
         notified = notified.intersection(Set(packages.map(\.versionKey)))
     }
-
-    // MARK: Upgrading
 
     func upgrade(_ pkg: OutdatedPackage) async {
         // A terminal run has a terminal for sudo to ask in, so only the app hands these over.
@@ -263,7 +252,8 @@ final class UpdateStore {
     /// One package at a time, each leaving the list once it succeeds, then a rescan per manager. What is
     /// upgraded is what is ready bar casks that need sudo (left for Terminal), or `candidates` (the CLI's).
     func upgradeAll(managers: [Manager], candidates: [OutdatedPackage]? = nil) async {
-        let grouped = Dictionary(grouping: candidates ?? eligible.filter { !updatesInTerminal($0) }, by: \.manager)
+        let grouped = Dictionary(
+            grouping: candidates ?? eligible.filter { !updatesInTerminal($0) && !$0.manualOnly }, by: \.manager)
         for manager in managers where !(manager.opensExternally && managers.count > 1) {
             guard let items = grouped[manager], !upgrading.contains(manager.rawValue) else { continue }
             upgrading.insert(manager.rawValue)
@@ -279,7 +269,7 @@ final class UpdateStore {
                 upgrading.insert(item.id)
                 await runUpgrade(manager: manager, packages: [item])
                 upgrading.remove(item.id)
-                if failures[item.id] == nil, !manager.opensExternally { packages.removeAll { $0.id == item.id } }
+                if failures[item.id] == nil, !item.opensExternally { packages.removeAll { $0.id == item.id } }
             }
             await rescanAfterUpgrade(manager)
         }
@@ -329,20 +319,18 @@ final class UpdateStore {
 
     /// Runs the upgrade script once. Callers manage the `upgrading` set and the rescan.
     private func runUpgrade(manager: Manager, packages items: [OutdatedPackage]) async {
-        let args = items.map(\.upgradeArgument)
         appendLog("\n\(Self.logMarker(manager: manager, names: items.map(\.name)))\n")
         guard takeUpdateLock(for: items) else { return }
         defer { updateLock.release() }
         var failure: String?
         let outcome = await runLogged({ emit in
-            try await ScriptRunner.upgrade(
-                manager: manager, arguments: args, brewGreedy: self.settings.brewGreedy, onOutput: emit)
+            try await ScriptRunner.upgrade(packages: items, brewGreedy: self.settings.brewGreedy, onOutput: emit)
         })
         switch outcome {
         case .success(let result):
             let status = result.status
             if status == 0 {
-                appendLog(manager.opensExternally ? "✓ opened updater\n" : "✓ done\n")
+                appendLog(items.first?.opensExternally == true ? "✓ opened updater\n" : "✓ done\n")
             } else {
                 appendLog("✗ exited with status \(status)\n")
                 failure = Self.errorSummary(result.combined, status: status)
@@ -359,9 +347,17 @@ final class UpdateStore {
         history.add(
             items.enumerated().map { index, item in
                 ActionRecord(
-                    kind: .upgrade, manager: manager, package: item.name,
+                    kind: item.opensExternally ? .handoff : .upgrade, manager: manager, package: item.name,
                     detail: failure
-                        ?? (manager.opensExternally ? "Opened updater" : "\(item.installed) → \(item.latest)"),
+                        ?? (item.installation?.update?.isHandoff == true
+                            ? item.installation?.update?.successDetail ?? "Opened updater"
+                            : item.opensExternally
+                                ? "Opened updater"
+                                : item.installation != nil
+                                    && (item.latest == item.installed || item.manager == .extensions
+                                        || item.manager == .nixprofile)
+                                    ? "Ran updater"
+                                    : "\(item.installed) → \(item.latest)"),
                     succeeded: failure == nil,
                     // Keep a shared command's output on its first row.
                     output: index == 0 ? output : nil, packageID: item.id)
@@ -441,15 +437,7 @@ final class UpdateStore {
     private func runLogged(
         _ body: @escaping (@escaping @Sendable (String) -> Void) async throws -> SubprocessResult
     ) async -> Result<SubprocessResult, Error> {
-        let (stream, continuation) = AsyncStream<String>.makeStream()
-        let consumer = Task { @MainActor [weak self] in
-            for await chunk in stream { self?.appendLog(chunk) }
-        }
-        let outcome: Result<SubprocessResult, Error>
-        do { outcome = .success(try await body { continuation.yield($0) }) } catch { outcome = .failure(error) }
-        continuation.finish()
-        await consumer.value
-        return outcome
+        await LoggedOperation.run(body, onOutput: appendLog)
     }
 
     /// Ask the window's log view to scroll to this package's most recent upgrade output.
@@ -479,11 +467,13 @@ final class UpdateStore {
 
     /// Replaces the store's content without scanning (screenshots, previews).
     func loadFixture(
-        reports: [ManagerReport], packages: [OutdatedPackage], log: String, tools: [ToolReport] = []
+        reports: [ManagerReport], packages: [OutdatedPackage], log: String, tools: [ToolReport] = [],
+        installations: [InstalledItem] = []
     ) {
         self.reports = reports
         self.tools = tools
         self.packages = packages
+        self.installations = installations
         self.log = log
         self.lastScan = Date().addingTimeInterval(-90)
         let now = Date()
@@ -494,7 +484,7 @@ final class UpdateStore {
         guard persistsState else { return }
         let s = SavedState(
             firstSeen: firstSeen, packages: packages, reports: reports, lastScan: lastScan, notified: notified,
-            lastAutoUpdate: lastAutoUpdate)
+            lastAutoUpdate: lastAutoUpdate, installations: installations)
         if let data = try? JSONEncoder.iso.encode(s) { try? data.write(to: stateURL, options: .atomic) }
     }
 }

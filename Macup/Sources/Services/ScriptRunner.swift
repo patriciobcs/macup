@@ -14,9 +14,11 @@ enum ScriptRunner {
 
     static func environment(brewGreedy: Bool) async -> [String: String] {
         var env = ProcessInfo.processInfo.environment
+        let explicitPath = env["MACUP_USER_PATH"]
         // The login shell's variables (PNPM_HOME, GOPATH, NVM_DIR, …) on top of the GUI environment.
         for (k, v) in await ShellEnvironment.shared.loginEnvironment() where k != "PATH" { env[k] = v }
-        env["MACUP_USER_PATH"] = await ShellEnvironment.shared.userPATH()
+        let loginPath = await ShellEnvironment.shared.userPATH()
+        env["MACUP_USER_PATH"] = explicitPath ?? loginPath
         env["HOME"] = env["HOME"] ?? NSHomeDirectory()
         env["LANG"] = env["LANG"] ?? "en_US.UTF-8"
         env["TERM"] = "dumb"
@@ -63,17 +65,62 @@ enum ScriptRunner {
             throw SubprocessError.launchFailed("macup-scan.sh missing from bundle")
         }
         let env = await environment(brewGreedy: brewGreedy)
-        let lines = LineBuffer()
-        let r = try await Subprocess.run(
-            executable: "/bin/zsh", arguments: [url.path] + managers.map(\.rawValue),
-            environment: env, timeout: 300, label: "The scan"
-        ) { chunk in
-            guard let onReport else { return }
-            for line in lines.take(chunk) {
-                for report in ScanParser.parse(line).reports { onReport(report) }
+        let customScripts = env["MACUP_SCRIPT_DIR"] != nil
+        let legacy = customScripts ? managers : managers.filter { !$0.usesInstallationBackend }
+        var result = ScanResult()
+        if !legacy.isEmpty {
+            let lines = LineBuffer()
+            let r = try await Subprocess.run(
+                executable: "/bin/zsh", arguments: [url.path] + legacy.map(\.rawValue),
+                environment: env, timeout: 300, label: "The scan"
+            ) { chunk in
+                guard let onReport else { return }
+                for line in lines.take(chunk) {
+                    for report in ScanParser.parse(line).reports { onReport(report) }
+                }
             }
+            result = ScanParser.parse(r.stdout)
         }
-        return ScanParser.parse(r.stdout)
+        guard !customScripts else { return result }
+        return await InstallationDiscovery.scanAll(
+            managers, existing: result, environment: .live(env), onReport: onReport)
+    }
+
+    static func upgrade(
+        packages: [OutdatedPackage], brewGreedy: Bool, onOutput: @Sendable @escaping (String) -> Void
+    ) async throws -> SubprocessResult {
+        guard let package = packages.first else {
+            return SubprocessResult(status: 0, stdout: "", stderr: "", combined: "")
+        }
+        guard packages.count == 1 || packages.allSatisfy({ $0.installation == nil }) else {
+            throw DiscoveryError.invalid(
+                "Update each scoped installation separately so its path and installer remain explicit")
+        }
+        if package.installation != nil {
+            var env = await environment(brewGreedy: brewGreedy)
+            if package.manager == .npm, package.installation?.isDefault == true,
+                env["MACUP_CMD_update_npm"] != nil, let prefix = package.installation?.root,
+                let script = scriptURL("macup-upgrade")
+            {
+                if env["MACUP_DRY_RUN"] != "1" {
+                    try InstallationActions.validate(package, removing: false, environment: .live(env))
+                }
+                env["npm_config_prefix"] = prefix
+                env["NPM_CONFIG_PREFIX"] = prefix
+                let result = try await Subprocess.run(
+                    executable: "/bin/zsh", arguments: [script.path, "npm", package.name],
+                    environment: env, timeout: 3_600, label: "Updating \(package.name)", onOutput: onOutput)
+                if result.status == 0, env["MACUP_DRY_RUN"] != "1" {
+                    try await InstallationVerification.verify(package, removing: false, environment: .live(env))
+                }
+                return result
+            }
+            return try await InstallationActions.run(
+                package, environment: .live(env), dryRun: env["MACUP_DRY_RUN"] == "1", onOutput: onOutput)
+        }
+        return try await upgrade(
+            manager: package.manager, arguments: packages.map(\.upgradeArgument), brewGreedy: brewGreedy,
+            onOutput: onOutput)
     }
 
     static func upgrade(
@@ -116,6 +163,11 @@ enum ScriptRunner {
         pkg: OutdatedPackage, brewGreedy: Bool,
         onOutput: @Sendable @escaping (String) -> Void
     ) async throws -> SubprocessResult {
+        if pkg.installation != nil {
+            let env = await environment(brewGreedy: brewGreedy)
+            return try await InstallationActions.run(
+                pkg, removing: true, environment: .live(env), dryRun: env["MACUP_DRY_RUN"] == "1", onOutput: onOutput)
+        }
         guard let url = scriptURL("macup-remove") else {
             throw SubprocessError.launchFailed("macup-remove.sh missing from bundle")
         }

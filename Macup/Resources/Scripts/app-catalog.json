@@ -1,0 +1,56 @@
+[
+  {
+    "bundleID": "com.obsproject.obs-studio"
+  },
+  {
+    "bundleID": "ch.protonvpn.mac"
+  },
+  {
+    "bundleID": "org.videolan.vlc",
+    "architectureFeeds": {
+      "arm64": "https://update.videolan.org/vlc/sparkle/vlc-arm64.xml",
+      "x86_64": "https://update.videolan.org/vlc/sparkle/vlc-intel64.xml"
+    }
+  },
+  {
+    "bundleID": "dev.zed.Zed",
+    "github": "zed-industries/zed"
+  },
+  {
+    "bundleID": "com.bitwarden.desktop",
+    "github": "bitwarden/clients",
+    "tagPrefix": "desktop-v"
+  },
+  {
+    "bundleID": "org.cryptomator",
+    "github": "cryptomator/cryptomator"
+  },
+  {
+    "bundleID": "io.github.polymeilex.neothesia",
+    "github": "PolyMeilex/Neothesia"
+  },
+  {
+    "bundleID": "es.gob.afirma.simpleafirma.osx",
+    "vendor": "https://firmaelectronica.gob.es/Home/Descargas.html"
+  },
+  {
+    "bundleID": "es.gob.fnmt.cert.certrerquest",
+    "vendor": "https://www.sede.fnmt.gob.es/descargas/configurador-fnmt"
+  },
+  {
+    "bundleID": "com.apple.SFSymbols",
+    "vendor": "https://developer.apple.com/sf-symbols/"
+  },
+  {
+    "bundleID": "com.ableton.live",
+    "vendor": "https://www.ableton.com/en/download/archive/"
+  },
+  {
+    "bundleID": "com.crystalidea.macsfancontrol",
+    "vendor": "https://crystalidea.com/macs-fan-control/download"
+  },
+  {
+    "bundleID": "com.westbridge.stremio5-mac",
+    "vendor": "https://www.stremio.com/downloads"
+  }
+]

@@ -295,7 +295,9 @@ final class PreferencesRoundTripTests: XCTestCase {
     }
 
     func testEverySettingIsWrittenWhereItCanBeReadBack() {
-        let d = UserDefaults.standard
+        let d =
+            ProcessInfo.processInfo.environment["MACUP_DEFAULTS_SUITE"].flatMap(UserDefaults.init(suiteName:))
+            ?? .standard
         settings.minAgeHours = 7
         settings.securityMinAgeHours = 3
         settings.checkIntervalHours = 9

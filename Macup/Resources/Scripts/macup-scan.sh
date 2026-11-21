@@ -49,6 +49,7 @@ source "${0:A:h}/macup-commands.sh"
 source "${0:A:h}/macup-pip.sh"
 source "${0:A:h}/macup-gem.sh"
 source "${0:A:h}/macup-native-tools.sh"
+source "${0:A:h}/macup-apps.sh"
 
 tool_of() { case "$1" in nix) print nix-env ;; tools|macos) print "" ;; *) print "$1" ;; esac }
 # M<tab>manager<tab>status<tab>message<tab>version. The version travels with every manager that is
@@ -396,27 +397,41 @@ scan_mas() {
   local out; local err="$tmp/mas.err"
   out=$(eval "$(check_cmd mas)" 2>"$err") || { header mas error "mas outdated failed$(vtag mas): $(errline "$err")"; return; }
   header mas ok
-  local id name cur latest app when version installed location
+  local id name cur latest app when version installed location priority best_priority rejected query_status paths preferred=""
   local -A seen
+  [[ -f "$HOME/Library/Preferences/com.apple.appstored.plist" ]] && \
+    preferred=$(plutil -extract PreferredVolume.name raw -o - "$HOME/Library/Preferences/com.apple.appstored.plist" 2>/dev/null)
   # "497799835 Xcode (15.0 -> 15.1)"
   printf '%s\n' "$out" | sed -nE 's/^([0-9]+) +(.*) \(([^ ]+) -> ([^)]+)\)$/\1\t\2\t\3\t\4/p' | \
   while IFS=$'\t' read -r id name cur latest; do
     [[ -n "${seen[$id]:-}" ]] && continue
     seen[$id]=1
-    # mas reads Spotlight metadata, which can describe an old duplicate after the main copy was
-    # updated. Its update command takes an App Store ID, not a path, so offering that ID again just
-    # reinstalls the current copy. Reconcile every indexed copy against its actual bundle version.
-    installed=""; location=""
-    while IFS= read -r app; do
-      [[ -f "$app/Contents/Info.plist" ]] || continue
-      version=$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist" 2>/dev/null)
-      [[ -n "$version" ]] || continue
-      if [[ -z "$installed" ]] || native_version_is_newer "$version" "$installed"; then
-        installed=$version; location=$app
-      fi
-    done < <(mdfind "kMDItemAppStoreAdamID == $id" 2>/dev/null)
+    # Spotlight's version can be stale. Prefer real installations over downloaded copies, and never
+    # let a backup, Trash or mounted installer hide an update needed by the installed app. A failed
+    # or incomplete lookup is not evidence that mas is wrong: preserve its report in that case.
+    installed=""; location=""; best_priority=-1; rejected=0; query_status=0
+    paths="$tmp/mas-$id.paths"
+    mdfind -0 "kMDItemAppStoreAdamID == $id" > "$paths" 2>/dev/null || query_status=$?
+    if (( query_status == 0 )); then
+      while IFS= read -r -d '' app; do
+        app=${app:A}
+        priority=$(macup_app_install_priority "$app" "$preferred") || { (( rejected++ )); continue; }
+        if (( priority > best_priority )); then
+          best_priority=$priority; installed=""; location=""
+        fi
+        (( priority < best_priority )) && continue
+        version=$(macup_app_store_version "$app") || continue
+        if [[ -z "$installed" ]] || native_version_is_newer "$version" "$installed"; then
+          installed=$version; location=$app
+        fi
+      done < "$paths"
+      # A successful query that found only removed/backup copies is a phantom installation.
+      (( rejected > 0 && best_priority < 0 )) && continue
+    fi
     [[ -n "$installed" ]] && cur=$installed
-    native_version_is_newer "$latest" "$cur" || continue
+    if macup_app_version_is_numeric "$latest" && macup_app_version_is_numeric "$cur"; then
+      native_version_is_newer "$latest" "$cur" || continue
+    fi
     when=""; [[ -n "$location" ]] && when=$(mtime "$location/Contents/Info.plist")
     pkg mas "$name" "$cur" "$latest" app "$id" "$when"
   done

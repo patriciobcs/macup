@@ -12,6 +12,10 @@ struct CommandLineReport: Encodable, Equatable {
         var released: Date?
         /// When a waiting update becomes ready. Absent for one that already is.
         var readyAt: Date?
+        var id: String?
+        var path: String?
+        var owner: String?
+        var action: String?
     }
 
     struct Problem: Encodable, Equatable {
@@ -27,6 +31,7 @@ struct CommandLineReport: Encodable, Equatable {
     var offline: Bool
     /// MacUp's own update, when Homebrew has one.
     var macupUpdate: String?
+    var uncheckedInstallations: Int?
 
     @MainActor
     init(store: UpdateStore) {
@@ -35,7 +40,9 @@ struct CommandLineReport: Encodable, Equatable {
             return Item(
                 manager: p.manager.rawValue, name: p.name, installed: p.installed, latest: p.latest,
                 security: p.isSecurity, released: reference,
-                readyAt: waiting ? reference.map { $0.addingTimeInterval(store.settings.threshold(for: p)) } : nil)
+                readyAt: waiting ? reference.map { $0.addingTimeInterval(store.settings.threshold(for: p)) } : nil,
+                id: p.installation == nil ? nil : p.id, path: p.installation?.path,
+                owner: p.installation?.owner, action: p.installation?.update?.title)
         }
         version = store.appVersion
         checkedAt = store.lastScan
@@ -44,6 +51,9 @@ struct CommandLineReport: Encodable, Equatable {
         problems = store.problems.map { Problem(manager: $0.manager.rawValue, message: $0.message) }
         offline = store.isOffline
         macupUpdate = store.selfCaskUpdate?.latest
+        uncheckedInstallations =
+            store.hasUncheckedInstallations
+            ? store.installations.filter { $0.latest == nil && $0.state != .managed }.count : nil
     }
 
     func json() -> String {
@@ -59,7 +69,8 @@ struct CommandLineReport: Encodable, Equatable {
         let checked = age.map { $0 < 60 ? "checked just now" : "checked \(DateText.short($0)) ago" } ?? "never checked"
         let headline =
             ready.isEmpty
-            ? "Everything is up to date" : "\(ready.count) \(ready.count == 1 ? "update" : "updates") ready"
+            ? (uncheckedInstallations == nil ? "Everything is up to date" : "No known updates")
+            : "\(ready.count) \(ready.count == 1 ? "update" : "updates") ready"
         out.append(style.bold(headline) + style.dim(" · \(checked)"))
 
         if !ready.isEmpty {
@@ -116,6 +127,7 @@ struct CommandLineReport: Encodable, Equatable {
                     .padding(toLength: versionWidth, withPad: " ", startingAt: 0)
                 let security = item.security ? "  " + style.yellow("security fix") : ""
                 lines.append("  \(name)  \(versions)  " + style.dim(note(item)) + security)
+                if let path = item.path { lines.append("    " + style.dim(path)) }
             }
         }
         return lines

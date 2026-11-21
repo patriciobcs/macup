@@ -40,13 +40,14 @@ shots=$(mktemp -d "${TMPDIR:-/tmp}/macup-shots.XXXXXX")
 # The render draws every view offscreen, so its profile is what covers the SwiftUI code.
 LLVM_PROFILE_FILE="$PWD/build/render.profraw" MACUP_SCREENSHOTS="$shots" \
   build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
-[[ "$(ls "$shots"/*.png | wc -l | tr -d ' ')" == 6 ]] || { echo "expected 6 renders" >&2; exit 1; }
+[[ "$(ls "$shots"/*.png | wc -l | tr -d ' ')" == 8 ]] || { echo "expected 8 renders" >&2; exit 1; }
 rm -rf "$shots"
 step "command line, end to end"
 # The built executable linked as `macup`, against a real npm in a throwaway home. %p: one profile per
 # process, since every macup call in the test is a process of its own.
 rm -f build/cli-*.profraw(N)
 LLVM_PROFILE_FILE="$PWD/build/cli-%p.profraw" tests/cli/test.sh build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
+LLVM_PROFILE_FILE="$PWD/build/cli-%p.profraw" python3 tests/installations/test.py build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp
 step "coverage"
 # Xcode links the app's own code into a debug dylib; the executable beside it is only a stub.
 dylib=build/Build/Products/Debug/MacUp.app/Contents/MacOS/MacUp.debug.dylib

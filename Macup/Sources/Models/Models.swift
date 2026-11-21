@@ -4,7 +4,7 @@ import Foundation
 enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
     // Order is display and "Update all" order: rustup runs before cargo so crates needing a newer rustc can build.
     case macos, brew, port, npm, bun, pnpm, pip, pipx, uv, conda, rustup, cargo, go, gem, composer, nix, mise,
-        gcloud, tailscale, tools, mas
+        gcloud, tailscale, tools, mas, orbstack, apps, runtimes, extensions, dotnet, dart, nixprofile, asdf, volta
 
     var id: String { rawValue }
 
@@ -31,6 +31,15 @@ enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
         case .tools: "Self-installed tools"
         case .gcloud: "Google Cloud CLI"
         case .tailscale: "Tailscale"
+        case .orbstack: "OrbStack"
+        case .apps: "Desktop apps"
+        case .runtimes: "Language runtimes"
+        case .extensions: "GitHub extensions"
+        case .dotnet: ".NET tools"
+        case .dart: "Dart global tools"
+        case .nixprofile: "Nix profiles"
+        case .asdf: "asdf runtimes"
+        case .volta: "Volta runtimes"
         }
     }
 
@@ -53,6 +62,11 @@ enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
         case .tools: "wrench.and.screwdriver"
         case .gcloud: "cloud"
         case .tailscale: "network"
+        case .orbstack: "shippingbox"
+        case .apps: "app.dashed"
+        case .runtimes, .asdf, .volta: "terminal"
+        case .extensions: "puzzlepiece.extension"
+        case .dotnet, .dart, .nixprofile: "cube"
         }
     }
 
@@ -73,7 +87,17 @@ enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
 
     /// Managers whose packages MacUp can uninstall. Toolchains, OS updates, self-installed tools and the
     /// conda base environment are left alone.
-    var supportsRemoval: Bool { ![.rustup, .mas, .macos, .tools, .mise, .conda, .gcloud, .tailscale].contains(self) }
+    var supportsRemoval: Bool {
+        ![
+            .rustup, .mas, .macos, .tools, .mise, .conda, .gcloud, .tailscale, .apps, .runtimes, .asdf, .volta,
+            .orbstack,
+        ].contains(self)
+    }
+
+    /// These adapters use structured output and installation-scoped actions in the native backend.
+    var usesInstallationBackend: Bool {
+        [.orbstack, .apps, .runtimes, .extensions, .dotnet, .dart, .nixprofile, .asdf, .volta].contains(self)
+    }
 
     /// OSV.dev ecosystem name used for vulnerability lookups, when the manager maps to one.
     var osvEcosystem: String? {
@@ -84,7 +108,11 @@ enum Manager: String, CaseIterable, Codable, Identifiable, Hashable {
         case .gem: "RubyGems"
         case .go: "Go"
         case .composer: "Packagist"
-        case .brew, .rustup, .mas, .macos, .port, .conda, .nix, .mise, .tools, .gcloud, .tailscale: nil
+        case .dotnet: "NuGet"
+        case .dart: "Pub"
+        case .brew, .rustup, .mas, .macos, .port, .conda, .nix, .mise, .tools, .gcloud, .tailscale,
+            .orbstack, .apps, .runtimes, .extensions, .nixprofile, .asdf, .volta:
+            nil
         }
     }
 }
@@ -128,10 +156,16 @@ struct OutdatedPackage: Identifiable, Equatable, Codable, Hashable {
     /// When the installed version landed on this Mac. Exact for Homebrew (install receipt); the install
     /// folder or binary modification time for everything else.
     var updatedAt: Date?
+    /// Absent in old state files and legacy scanners. Default installations retain their old ids.
+    var installation: InstallationReference?
 
     /// Homebrew can have a formula and a cask with the same name, so brew ids carry the kind.
-    var id: String { manager == .brew ? "brew:\(baseKind):\(name)" : "\(manager.rawValue):\(name)" }
-    var versionKey: String { "\(id)@\(latest)" }
+    var id: String {
+        guard let installation else { return legacyID }
+        return "\(legacyID)@installation=\(installation.key)"
+    }
+    var legacyID: String { manager == .brew ? "brew:\(baseKind):\(name)" : "\(manager.rawValue):\(name)" }
+    var versionKey: String { "\(id)@\(installation?.release ?? latest)" }
     /// Lives in a location owned by macOS (system Ruby, Xcode's Python, a root-owned npm prefix).
     var isSystem: Bool { kind.hasPrefix("system-") }
     /// Kind without the "system-" marker, e.g. "cask", "gem".
@@ -180,6 +214,7 @@ struct ScanResult: Equatable {
     var reports: [ManagerReport] = []
     var packages: [OutdatedPackage] = []
     var tools: [ToolReport] = []
+    var installations: [InstalledItem] = []
 }
 
 /// What MacUp is doing at this moment, in one line.
@@ -191,7 +226,8 @@ enum Activity {
     static func title(packages: [String], installing: Set<Manager>, managers: [Manager]) -> String {
         if let id = packages.min() {
             // Package ids are "manager:name"; a name may itself contain a colon (a Go import path).
-            let name = id.split(separator: ":").dropFirst().joined(separator: ":")
+            let name = id.components(separatedBy: "@installation=")[0]
+                .split(separator: ":").dropFirst().joined(separator: ":")
             return packages.count > 1 ? "Updating \(name) and \(packages.count - 1) more" : "Updating \(name)"
         }
         if let manager = installing.min(by: { $0.rawValue < $1.rawValue }) {

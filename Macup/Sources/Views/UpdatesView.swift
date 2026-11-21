@@ -39,6 +39,7 @@ struct UpdatesView: View {
         if store.isScanning && store.packages.isEmpty { return "Checking for updates…" }
         let n = store.badgeCount
         if n == 0 && store.hasScanProblems { return "Could not check all updates" }
+        if n == 0 && store.hasUncheckedInstallations { return "No known updates" }
         if n == 0 { return "Everything is up to date" }
         return "\(n) update\(n == 1 ? "" : "s") ready"
     }
@@ -73,7 +74,11 @@ struct UpdatesView: View {
     private var emptyState: some View {
         VStack(spacing: 6) {
             Image(systemName: "checkmark.seal").font(.system(size: 28)).foregroundStyle(.green)
-            Text("All \(store.discoveredManagers.count) package managers are up to date.").foregroundStyle(.secondary)
+            Text(
+                store.hasUncheckedInstallations
+                    ? "Some apps check through their own updater. Review them in Installations."
+                    : "All \(store.discoveredManagers.count) package managers are up to date."
+            ).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity)
     }
@@ -135,7 +140,7 @@ struct PackageRow: View {
     var body: some View {
         row.contextMenu {
             Button("Ignore \(pkg.name)") { store.ignore(pkg) }
-            if pkg.manager.supportsRemoval {
+            if pkg.supportsRemoval {
                 Button("Remove \(pkg.name)…") { confirmAndRemove() }
             }
             if store.updatesInTerminal(pkg) {
@@ -173,6 +178,11 @@ struct PackageRow: View {
                             .help(pkg.advisories.joined(separator: ", "))
                     }
                 }
+                if let installation = pkg.installation {
+                    Text("\(installation.owner) · \(installation.path)")
+                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        .help(installation.path)
+                }
                 // Longest phrasing that fits the available width: sentences → short words → icons.
                 ViewThatFits(in: .horizontal) {
                     detailLine(style: .full)
@@ -203,14 +213,14 @@ struct PackageRow: View {
                 .accessibilityLabel("Update failed, show output")
                 Button("Retry") { Task { await store.upgrade(pkg) } }.controlSize(.small)
             } else {
-                Button(pkg.manager.updateButtonTitle) { Task { await store.upgrade(pkg) } }
+                Button(pkg.updateButtonTitle) { Task { await store.upgrade(pkg) } }
                     .controlSize(.small)
                     .help(
-                        pkg.manager.opensExternally
-                            ? pkg.manager.externalUpdateHelp
+                        pkg.opensExternally
+                            ? pkg.updateHelp
                             : eligible ? "Update \(pkg.name)" : "Update now, before the minimum age has passed")
             }
-            if pkg.manager.supportsRemoval && !store.isUpgrading(pkg) {
+            if pkg.supportsRemoval && !store.isUpgrading(pkg) {
                 Button {
                     confirmAndRemove()
                 } label: {

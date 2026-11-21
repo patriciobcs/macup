@@ -29,6 +29,10 @@ enum Screenshots {
                 SettingsView().environment(store).environment(settings),
                 size: CGSize(width: 520, height: 700), dark: dark,
                 to: url.appendingPathComponent("settings-\(suffix).png"))
+            capture(
+                InstallationsView().environment(store).environment(settings),
+                size: CGSize(width: 900, height: 620), dark: dark,
+                to: url.appendingPathComponent("installations-\(suffix).png"))
         }
         NSApp.terminate(nil)
         return true
@@ -106,6 +110,45 @@ extension UpdateStore {
             log:
                 "── Homebrew: jq ──\n$ brew upgrade -- jq\n==> Upgrading jq 1.7.1 -> 1.8.2\n🍺  /opt/homebrew/Cellar/jq/1.8.2: 21 files, 1.4MB\n✓ done\n"
         )
+        let items = installationFixtures()
+        store.loadFixture(reports: store.reports, packages: store.packages, log: store.log, installations: items)
         return store
+    }
+
+    private static func installationFixtures() -> [InstalledItem] {
+        let prefix = "/Users/developer/.local/share/node/v22.22.2"
+        return [
+            InstalledItem(
+                manager: .npm, name: "TypeScript", version: "5.9.0",
+                reference: .init(
+                    path: prefix + "/lib/node_modules/typescript", root: prefix, owner: "npm",
+                    update: .init(
+                        executable: prefix + "/bin/npm", arguments: ["install", "--global", "typescript@latest"],
+                        manualOnly: false),
+                    remove: .init(executable: prefix + "/bin/npm", arguments: ["uninstall", "--global", "typescript"])),
+                latest: "6.0.0", note: "Current npm prefix"),
+            InstalledItem(
+                manager: .npm, name: "TypeScript", version: "4.7.4",
+                reference: .init(
+                    path: "/usr/local/lib/node_modules/typescript", root: "/usr/local", owner: "npm",
+                    remove: .init(
+                        executable: prefix + "/bin/npm",
+                        arguments: ["uninstall", "--global", "--prefix", "/usr/local", "typescript"])),
+                state: .orphaned, note: "No command link in this prefix; may be a leftover installation"),
+            InstalledItem(
+                manager: .apps, name: "Example App", version: "1.0",
+                reference: .init(
+                    path: "/Applications/Example App.app", root: "/Applications", owner: "Vendor",
+                    update: .init(kind: .openApp, executable: "/Applications/Example App.app", title: "Open App")),
+                state: .manual, note: "Uses the vendor's updater"),
+            InstalledItem(
+                manager: .runtimes, name: "Node.js 22", version: "22.22.2",
+                reference: .init(
+                    path: prefix + "/bin/node", root: prefix, owner: "Node.js distribution",
+                    update: .init(
+                        kind: .nodePatch, executable: prefix + "/bin/node", arguments: ["22.23.5", "arm64"],
+                        title: "Update Runtime")),
+                latest: "22.23.5", note: "Keeps this Node major and npm prefix"),
+        ]
     }
 }

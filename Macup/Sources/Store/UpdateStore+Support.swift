@@ -54,7 +54,7 @@ extension UpdateStore {
         if let lastAutoUpdate, Date().timeIntervalSince(lastAutoUpdate) < interval { return false }
         // Only what an unattended run would really install: anything left for System Settings or behind a
         // password would spend the interval on nothing and hold back the next real update a whole day.
-        if eligible.contains(where: { !$0.manager.opensExternally && !needsAdmin($0) && !updatesInTerminal($0) }) {
+        if eligible.contains(where: { !$0.manualOnly && !needsAdmin($0) && !updatesInTerminal($0) }) {
             return true
         }
         return selfCaskUpdate.map { isEligible($0) && !needsAdmin($0) } ?? false
@@ -79,7 +79,7 @@ extension UpdateStore {
     /// What "Update All" will actually run (system updates are a hand-off to System Settings, and casks
     /// that need sudo are left for Terminal).
     var updatableCount: Int {
-        eligible.filter { !$0.manager.opensExternally && !updatesInTerminal($0) }.count + selfUpdateCount
+        eligible.filter { !$0.manualOnly && !updatesInTerminal($0) }.count + selfUpdateCount
     }
 
     /// True while this specific package is being upgraded (a manager-wide lock also covers rustup toolchains).
@@ -177,6 +177,7 @@ extension UpdateStore {
         var lastScan: Date?
         var notified: Set<String>
         var lastAutoUpdate: Date?
+        var installations: [InstalledItem]?
     }
 
     // MARK: Notifications

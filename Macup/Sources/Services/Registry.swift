@@ -65,13 +65,17 @@ actor Registry {
     // MARK: Per-package resolution
 
     private func resolve(_ input: OutdatedPackage) async -> OutdatedPackage? {
+        // Scoped discovery is authoritative for private sources, build numbers and native checks.
+        if let installation = input.installation, installation.publicPackage != true { return input }
         var pkg = input
         if pkg.needsLatest {
             guard let latest = await latestVersion(for: pkg) else { return nil }
             pkg.latest = latest
         }
         // Whatever the source, only a strictly newer version is an update.
-        if pkg.installed != "?", !Version.isNewer(pkg.latest, than: pkg.installed) { return nil }
+        if pkg.installation == nil, pkg.installed != "?", !Version.isNewer(pkg.latest, than: pkg.installed) {
+            return nil
+        }
         requestFailed = false
         if pkg.releaseDate == nil {
             if let cached = cache["date:\(pkg.versionKey)"], let src = cached.source,
@@ -183,7 +187,8 @@ actor Registry {
                 let s = json["published_at"] as? String, let d = Self.parseISO(s)
             else { return nil }
             return (d, .registry)
-        case .rustup, .mas, .macos, .port, .conda, .nix, .mise, .gcloud, .tailscale:
+        case .rustup, .mas, .macos, .port, .conda, .nix, .mise, .gcloud, .tailscale,
+            .orbstack, .apps, .runtimes, .extensions, .dotnet, .dart, .nixprofile, .asdf, .volta:
             return nil
         }
     }
@@ -217,6 +222,7 @@ actor Registry {
     private func attachAdvisories(_ packages: inout [OutdatedPackage]) async {
         var toQuery: [(index: Int, ecosystem: String)] = []
         for (i, p) in packages.enumerated() {
+            guard p.installation == nil || p.installation?.publicPackage == true else { continue }
             guard let eco = p.manager.osvEcosystem else { continue }
             let key = "osv:\(p.id)@\(p.installed)"
             if let e = cache[key], let adv = e.advisories, (e.expires ?? .distantPast) > Date() {

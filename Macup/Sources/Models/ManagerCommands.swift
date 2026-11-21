@@ -45,6 +45,10 @@ extension Manager {
 
     /// Why this manager's commands cannot be edited, for the UI to show instead of an editor.
     var notEditableReason: String? {
+        if usesInstallationBackend {
+            return
+                "Each copy uses its recorded installer or vendor updater. Its command is shown with that installation."
+        }
         guard runsElevated else { return nil }
         return "\(title) asks for an administrator password to change anything, and MacUp will not run a "
             + "command as root that came from a setting — only the program it names itself. You can see "
@@ -54,6 +58,10 @@ extension Manager {
     /// Why a phase has no one command, so the app can say so rather than leave a gap where an editor
     /// would be. Returns nil when there is a command, which is the ordinary case.
     func noCommandReason(_ phase: CommandPhase) -> String? {
+        if usesInstallationBackend {
+            return
+                "Checks and actions are specific to each installation. See Installations for its path, owner and updater."
+        }
         switch phase {
         case .check:
             switch self {

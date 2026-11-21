@@ -52,6 +52,7 @@ jobs:
               - 'tests/mas/**'
               - 'tests/release/**'
               - 'tests/cli/**'
+              - 'tests/installations/**'
               - 'project.yml'
               - 'scripts/**'
               - '.swift-format'

@@ -29,7 +29,7 @@ ln -s "$APP" "$H/bin/macup"
 # global packages in the throwaway home.
 E=(env -i HOME="$H" USER="${USER:-runner}" TMPDIR="${TMPDIR:-/tmp}" SHELL=/bin/zsh NO_COLOR=1
    PATH="$H/bin:$H/npm/bin:${$(command -v node):h}:${$(command -v npm):h}:/usr/bin:/bin:/usr/sbin:/sbin"
-   npm_config_prefix="$H/npm" npm_config_update_notifier=false MACUP_STATE_DIR="$H/state" MACUP_DEFAULTS_SUITE="$SUITE"
+   npm_config_prefix="$H/npm" npm_config_update_notifier=false MACUP_STATE_DIR="$H/state" MACUP_DEFAULTS_SUITE="$SUITE" MACUP_DISCOVERY_ROOT="$H/system"
    ${LLVM_PROFILE_FILE:+LLVM_PROFILE_FILE=$LLVM_PROFILE_FILE})
 m() { "${E[@]}" macup "$@" 2>&1 }
 installed() { "${E[@]}" npm ls -g --depth=0 is-odd 2>/dev/null | sed -nE 's/.*is-odd@([0-9.]+).*/\1/p' }
@@ -57,7 +57,7 @@ assert d["ready"][0]["manager"] == "npm" and d["ready"][0]["installed"] == "2.0.
 ' && ok "status --json is valid and lists it" || bad "status --json" "$json"
 
 out=$(m upgrade npm --dry-run); code "a dry run exits 0" $? 0
-has "a dry run prints the real command" "$out" "\$ npm install -g is-odd@latest"
+has "a dry run prints the real command" "$out" "--prefix"
 [[ "$(installed)" == 2.0.0 ]] && ok "and changes nothing" || bad "dry run" "is-odd is now $(installed)"
 
 out=$(m ignore npm:is-odd); has "ignore" "$out" "Ignoring npm:is-odd"
@@ -81,7 +81,7 @@ wait $holder
 code "upgrade exits 0" $rc 0
 has "it waits for the other one" "$out" "Waiting for MacUp to finish updating"
 (( waited >= 2 )) && ok "rather than running alongside it (${waited}s)" || bad "lock" "finished after ${waited}s"
-has "it streams npm's own output" "$out" "\$ npm install -g is-odd@latest"
+has "it streams npm's own output" "$out" "--prefix"
 has "and sums up" "$out" "Updated 1 package."
 now=$(installed)
 [[ -n "$now" && "$now" != 2.0.0 ]] && ok "is-odd really is $now now" || bad "upgrade" "is-odd is still ${now:-missing}"
